@@ -156,6 +156,17 @@ class Ball:
     def asint(self) -> tuple[int, int]:
         return tuple(int(v) for v in self.xy)
     
+    def draw(self, frame: np.ndarray) -> np.ndarray:
+        cv2.circle(
+            frame,
+            tuple(int(x) for x in self.xy),
+            6,
+            (255, 255, 0),
+            -1,
+        )
+
+        return frame
+    
     def draw_projection(self, frame: np.ndarray) -> np.ndarray:
         cv2.circle(
             frame,

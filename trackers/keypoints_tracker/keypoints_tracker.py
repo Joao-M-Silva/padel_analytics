@@ -110,7 +110,7 @@ class KeypointsTracker:
         path: str | Path,
     ) -> list[list[Keypoint]]:
         
-        print("Loading Keypoint Detections ...")
+        print("Loading Keypoints Detections ...")
 
         with open(path, "r") as f:
             parsable_keypoints_detections = json.load(f)
@@ -187,7 +187,7 @@ class KeypointsTracker:
                 device=self.DEVICE,
                 max_det=self.NUMBER_KEYPOINTS,
             )[0]
-
+        
         for i, keypoint in enumerate(result.keypoints.xy.squeeze(0)):
             keypoints.append(
                 Keypoint(
@@ -196,7 +196,7 @@ class KeypointsTracker:
                 )
             )
 
-        return keypoints
+        return result
             
     def detect_frames(
         self, 
@@ -298,7 +298,7 @@ class KeypointsTracker:
         self,
         frame: np.ndarray,
         keypoints_detection: list[Keypoint],
-    ) -> list[np.ndarray]:
+    ) -> np.ndarray:
         for keypoint in keypoints_detection:
             frame = keypoint.draw(frame)
 
