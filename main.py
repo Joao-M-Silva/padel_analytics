@@ -1,5 +1,6 @@
 from pathlib import Path
 import timeit
+import json
 import cv2
 import numpy as np
 import supervision as sv
@@ -116,6 +117,11 @@ if __name__ == "__main__":
         )
         for i, v in enumerate(SELECTED_KEYPOINTS)
     ]
+
+    if CACHE_SAVE_PATH is not None:
+        fixed_keypoints_detection_path = CACHE_SAVE_PATH / "fixed_keypoints_detection.json"
+        with open(fixed_keypoints_detection_path, "w") as f:
+            json.dump(SELECTED_KEYPOINTS, f)
 
     # FILTER FRAMES OF INTEREST
 
