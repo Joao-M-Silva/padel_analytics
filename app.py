@@ -10,6 +10,7 @@ from trackers import Keypoint, PlayerTracker, BallTracker, KeypointsTracker
 from analytics import DataAnalytics
 from visualizations.padel_court import padel_court_2d
 from estimate_velocity import BallVelocityEstimator, ImpactType
+from trackers.velocity_in_time import get_velocity_vector_per_frame_interval
 
 if "video" not in st.session_state:
     st.session_state["video"] = None
@@ -21,10 +22,10 @@ if "fixed_keypoints_detection" not in st.session_state:
     st.session_state["fixed_keypoints_detection"] = None
 
 if "keypoints_detections" not in st.session_state:
-    st.session_state["players_detection"] = None
+    st.session_state["keypoints_detections"] = None
 
 if "players_detections" not in st.session_state:
-    st.session_state["keypoints_detections"] = None
+    st.session_state["players_detections"] = None
 
 if "ball_detections" not in st.session_state:
     st.session_state["ball_detections"] = None
@@ -95,6 +96,10 @@ if upload_video or st.session_state["video"] is not None:
                 "Impact type: ",
                 options=["Floor", "Player"],
             )
+            get_Vz = st.radio(
+                "Consider difference in ball altitude: ",
+                options=[False, True]
+            )
 
             estimate = st.form_submit_button("Calculate velocity")
 
@@ -118,7 +123,7 @@ if upload_video or st.session_state["video"] is not None:
                     impact_type = ImpactType.RACKET
 
                 ball_velocity_data, ball_velocity = estimator.estimate_velocity(
-                    frame_index_t0, frame_index_t1, impact_type
+                    frame_index_t0, frame_index_t1, impact_type, get_Vz=get_Vz,
                 )
                 st.write(ball_velocity)
                 st.image(ball_velocity_data.draw_velocity(st.session_state["video"]))
@@ -220,7 +225,7 @@ if upload_video or st.session_state["video"] is not None:
         )
         st.session_state["ball_detections"] = ball_tracker.load_detections(BALL_DETECTIONS_LOAD_PATH)
         assert len(st.session_state["ball_detections"]) == total_frames
-
+        
         keypoints_tracker = KeypointsTracker(
             model_path=KEYPOINTS_TRACKER_MODEL,
             model_type="yolo",
@@ -236,9 +241,7 @@ if upload_video or st.session_state["video"] is not None:
         df = data_analytics.into_dataframe(fps)
         st.session_state["df"] = df
 
-
-
-st.session_state["df"] =  None
+# st.session_state["df"] =  None
 if st.session_state["df"] is not None:
     st.header("Loaded dataframe")
     st.write("First 20 lines")

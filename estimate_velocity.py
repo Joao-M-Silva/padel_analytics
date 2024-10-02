@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, Optional
 from dataclasses import dataclass
 import numpy as np
 import cv2
@@ -6,6 +6,7 @@ from enum import Enum, auto
 import pims
 
 from trackers import Player, Ball, Keypoint
+from utils.conversions import convert_pixel_distance_to_meters
 
 
 class VelocityConverter(Enum):
@@ -98,10 +99,14 @@ class BallVelocity:
     converter: VelocityConverter
     Vx: float
     Vy: float
+    Vz: Optional[float]
 
     @property
     def norm(self):
-        return np.sqrt(self.Vx**2 + self.Vy**2)
+        if self.Vz is None:
+            return np.sqrt(self.Vx**2 + self.Vy**2)
+        else:
+            return np.sqrt(self.Vx**2 + self.Vy**2 + self.Vz**2)
 
 class BallVelocityEstimator:
 
@@ -150,13 +155,14 @@ class BallVelocityEstimator:
         frame_index_t1: int,
         impact_type: ImpactType,
         converter: VelocityConverter = VelocityConverter.KM_PER_H,
+        get_Vz: bool = False,
     ) -> Tuple[BallVelocityData, BallVelocity]:
         
         delta_time = (frame_index_t1 - frame_index_t0) / self.fps
 
-        players_detection = self.players_detections[frame_index_t0]
-        players_detection = sorted(
-            players_detection,
+        players_detection_t0 = self.players_detections[frame_index_t0]
+        players_detection_t0 = sorted(
+            players_detection_t0,
             key=lambda x: x.id,
         )
 
@@ -173,19 +179,16 @@ class BallVelocityEstimator:
 
         ball_detection_t0 = self.ball_detections[frame_index_t0]
         ball_detection_t1 = self.ball_detections[frame_index_t1]
-
-        print(ball_detection_t0)
-        print(ball_detection_t1)
         
-        player_index = self.find_index_closest_player(
+        player_index_t0 = self.find_index_closest_player(
             reference=tuple(float(x) for x in ball_detection_t0.xy),
-            players_detection=players_detection,
+            players_detection=players_detection_t0,
         )
 
         ball_position_t0 = np.array(
             [
                 ball_detection_t0.xy[0],
-                float(players_detection[player_index].feet[1]),
+                float(players_detection_t0[player_index_t0].feet[1]),
             ]
         )
 
@@ -195,22 +198,55 @@ class BallVelocityEstimator:
         if impact_type == ImpactType.FLOOR:
             ball_position_t1 = ball_detection_t1
         elif impact_type == ImpactType.RACKET:
-            players_detection = self.players_detections[frame_index_t1]
-            players_detection = sorted(
-                players_detection,
+            players_detection_t1 = self.players_detections[frame_index_t1]
+            players_detection_t1 = sorted(
+                players_detection_t1,
                 key=lambda x: x.id,
             )
-            player_index = self.find_index_closest_player(
+            player_index_t1 = self.find_index_closest_player(
                 reference=tuple(float(x) for x in ball_detection_t1),
-                players_detection=players_detection,
+                players_detection=players_detection_t1,
             )
 
             ball_position_t1 = np.array(
                 [
                     ball_detection_t1[0],
-                    float(players_detection[player_index].feet[1]),
+                    float(players_detection_t1[player_index_t1].feet[1]),
                 ]
             )
+
+        if get_Vz:
+            player_height_pixels_t0 = float(players_detection_t0[player_index_t0].height)
+
+            ball_height_pixels_t0 = abs(
+                ball_detection_t0[1]
+                -
+                ball_position_t0[1]
+            )
+            ball_height_meters_t0 = convert_pixel_distance_to_meters(
+                ball_height_pixels_t0,
+                reference_in_meters=1.8,
+                reference_in_pixels=player_height_pixels_t0,
+            )
+
+            if impact_type == ImpactType.FLOOR:
+                Vz = ball_height_meters_t0 / delta_time
+            elif impact_type == ImpactType.RACKET:
+                player_height_pixels_t1 = float(players_detection_t1[player_index_t1].height)
+
+                ball_height_pixels_t1 = abs(
+                    ball_detection_t1[1]
+                    -
+                    ball_position_t1[1]
+                )
+                ball_height_meters_t1 = convert_pixel_distance_to_meters(
+                    ball_height_pixels_t1,
+                    reference_in_meters=1.8,
+                    reference_in_pixels=player_height_pixels_t1,
+                )
+                Vz = (ball_height_meters_t1 - ball_height_meters_t0) / delta_time
+        else:
+            Vz = None
         
         src_keypoints = np.array(source_keypoints, np.float32)
 
@@ -222,7 +258,7 @@ class BallVelocityEstimator:
         ball_velocity_data = BallVelocityData(
             frame_index_t0=frame_index_t0,
             frame_index_t1=frame_index_t1,
-            player_index=player_index,
+            player_index=player_index_t0,
             detection_t0=ball_detection_t0,
             detection_t1=ball_detection_t1,
             position_t0=ball_position_t0,
@@ -233,10 +269,14 @@ class BallVelocityEstimator:
 
         Vx = (x1_p - x0_p) / delta_time
         Vy = (y1_p - y0_p) / delta_time
-
+            
         multiplier = converter.value
         Vx, Vy = Vx*multiplier, Vy*multiplier
+        print("HERE")
+        print(Vz)
+        if Vz is not None:
+            Vz = Vz*multiplier
 
-        ball_velocity = BallVelocity(converter, Vx, Vy)
+        ball_velocity = BallVelocity(converter, Vx, Vy, Vz)
 
         return ball_velocity_data, ball_velocity

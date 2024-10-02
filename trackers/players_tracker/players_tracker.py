@@ -8,6 +8,7 @@ from ultralytics import YOLO
 import supervision as sv
 
 from utils import converters
+from trackers.tracker import Tracker
 
 
 class Player:
@@ -172,7 +173,7 @@ class Player:
         return frame
 
 
-class PlayerTracker:
+class PlayerTracker(Tracker):
 
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     

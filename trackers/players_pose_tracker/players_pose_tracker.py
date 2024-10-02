@@ -62,11 +62,16 @@ class PoseKeypoints:
     ]
 
     def __init__(self, pose_keypoints: list[PoseKeypoint]):
+        if pose_keypoints == []:
+            self.keypoints = {}
+        else:
+            self.keypoints = {
+                keypoint.name: keypoint.asint()
+                for keypoint in pose_keypoints
+            }
+        
         self.pose_keypoints = pose_keypoints
-        self.keypoints = {
-            keypoint.name: keypoint.asint()
-            for keypoint in pose_keypoints
-        }
+            
 
     def to_dict(self) -> dict:
         return {
@@ -85,6 +90,9 @@ class PoseKeypoints:
         return cls(pose_keypoints)
 
     def draw(self, frame: np.ndarray) -> np.ndarray:
+
+        if self.keypoints == {}:
+            return frame
 
         frame = frame.copy()
 

@@ -55,6 +55,9 @@ KEYPOINTS_TRACKER_MODEL = "./runs/keypoints/train2/weights/best.pt"
 PLAYERS_KEYPOINTS_TRACKER_MODEL = "./runs/pose/train3/weights/best.pt"
 OUTPUT_VIDEO_PATH = "test_all_detections.mp4"
 
+CROP_SIZE = 300
+
+
 if __name__ == "__main__":
     
     t1 = timeit.default_timer()
@@ -66,15 +69,6 @@ if __name__ == "__main__":
         video_info.height,
         video_info.total_frames,
     )
-    frame_generator = sv.get_video_frames_generator(
-        INPUT_VIDEO_PATH,
-        start=0,
-        stride=1,
-        end=300,
-    )
-
-    """SUBOPTIMAL"""
-    frames = list(frame_generator)
 
     ##### frames, fps, w, h = read_video(INPUT_VIDEO_PATH, max_frames=300)
     
@@ -141,7 +135,7 @@ if __name__ == "__main__":
         INPUT_VIDEO_PATH,
         start=0,
         stride=1,
-        end=300,
+        end=CROP_SIZE,
     )
 
     player_detections = player_tracker.detect_frames(
@@ -165,7 +159,7 @@ if __name__ == "__main__":
         INPUT_VIDEO_PATH,
         start=0,
         stride=1,
-        end=300,
+        end=CROP_SIZE,
     )
 
     players_keypoints_detections = players_pose_tracker.detect_frames(
@@ -181,8 +175,17 @@ if __name__ == "__main__":
     else:
         ball_detections_save_path = None
 
+    """SUBOPTIMAL"""
+    frame_generator = sv.get_video_frames_generator(
+        INPUT_VIDEO_PATH,
+        start=0,
+        stride=1,
+        end=CROP_SIZE,
+    )
+
     ball_detections = ball_tracker.detect_frames(
-        frames,  # OPTIMIZE THIS
+        frames=frame_generator, 
+        total_frames=CROP_SIZE,
         width=w,
         height=h,
         batch_size=8,
@@ -201,20 +204,29 @@ if __name__ == "__main__":
     else:
         keypoints_detections_save_path = None
 
+    """SUBOPTIMAL"""
+    frame_generator = sv.get_video_frames_generator(
+        INPUT_VIDEO_PATH,
+        start=0,
+        stride=1,
+        end=CROP_SIZE,
+    )
+
     # MIGH ONLY DETECT IN WIDE STEPS (OR EVEN ON A SINGLE FRAME DUE TO FIXED CAMERA)
     keypoints_detections = keypoints_tracker.detect_frames(
-        frames,
+        frame_generator,
         save_path=keypoints_detections_save_path,
         load_path=KEYPOINTS_DETECTIONS_LOAD_PATH,
         frequency=1,
         use_extra_model=False,
     )
 
+    """SUBOPTIMAL"""
     frame_generator = sv.get_video_frames_generator(
         INPUT_VIDEO_PATH,
         start=0,
         stride=1,
-        end=300,
+        end=CROP_SIZE,
     )
     
     # Draw players detections
@@ -242,7 +254,7 @@ if __name__ == "__main__":
     )
 
     # 2D PROJECTION
-    mini_court = MiniCourt(frames[0])
+    mini_court = MiniCourt(img)
     output_frames, data_analytics = mini_court.draw_minicourt_with_projections(
         output_frames,
         keypoints_detections,

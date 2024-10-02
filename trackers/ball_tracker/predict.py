@@ -1,9 +1,10 @@
+from typing import Union
 import numpy as np
 import cv2
 import torch
 
 
-def predict_location(heatmap):
+def predict_location(heatmap: np.array):
     """ Get coordinates from the heatmap.
 
         Args:
@@ -17,7 +18,11 @@ def predict_location(heatmap):
         return 0, 0, 0, 0
     else:
         # Find all respond area in the heapmap
-        (cnts, _) = cv2.findContours(heatmap.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        (cnts, _) = cv2.findContours(
+            heatmap.copy(), 
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
         rects = [cv2.boundingRect(ctr) for ctr in cnts]
 
         # Find largest area amoung all contours
@@ -28,6 +33,7 @@ def predict_location(heatmap):
             if area > max_area:
                 max_area_idx = i
                 max_area = area
+
         x, y, w, h = rects[max_area_idx]
 
         return x, y, w, h
@@ -48,7 +54,7 @@ def to_img(image):
     return image
 
 
-def to_img_format(input, WIDTH: int, HEIGHT: int, num_ch=1, ):
+def to_img_format(input, WIDTH: int, HEIGHT: int, num_ch=1):
     """ Helper function for transforming model input sequence format to image sequence format.
 
         Args:
@@ -138,3 +144,78 @@ def predict(indices, WIDTH: int, HEIGHT: int, y_pred=None, c_pred=None, img_scal
                 break
     
     return pred_dict    
+
+
+def predict_modified(
+    WIDTH: int, 
+    HEIGHT: int, 
+    y_pred: Union[torch.Tensor, np.array] = None, 
+    c_pred: Union[torch.Tensor, np.array] = None, 
+    img_scaler: tuple[float, float] = (1.0, 1.0),
+    threshold: float = 0.5,
+) -> dict:
+    """ Predict coordinates from heatmap or inpainted coordinates. 
+
+        Args:
+            y_pred (torch.Tensor, optional): predicted heatmap sequence with shape (N, L, H, W)
+            c_pred (torch.Tensor, optional): predicted inpainted coordinates sequence with shape (N, L, 2)
+            img_scaler (Tuple): image scaler (w_scaler, h_scaler)
+
+        Returns:
+            pred_dict (Dict): dictionary of predicted coordinates
+                Format: {'Frame':[], 'X':[], 'Y':[], 'Visibility':[]}
+    """
+
+    pred_dict = {
+        'x': [], 
+        'y': [], 
+        'visibility': []
+    }
+    
+    # Transform input for heatmap prediction
+    if y_pred is not None:
+        y_pred = y_pred > threshold
+        y_pred = (
+            y_pred.detach().cpu().numpy() 
+            if torch.is_tensor(y_pred) 
+            else y_pred
+        )
+    
+    # Transform input for coordinate prediction
+    if c_pred is not None:
+        c_pred = (
+            c_pred.detach().cpu().numpy() 
+            if torch.is_tensor(c_pred) 
+            else c_pred
+        )
+
+    number_preds = y_pred.shape[0]
+    for n in range(number_preds):
+        if c_pred is not None:
+            # Predict from coordinate
+            c_p = c_pred[n][0]
+            cx_pred, cy_pred = (
+                int(c_p[0] * WIDTH * img_scaler[0]), 
+                int(c_p[1] * HEIGHT * img_scaler[1]),
+            )
+        elif y_pred is not None:
+            # Predict from heatmap
+            y_p = y_pred[n][0]
+            bbox_pred = predict_location(to_img(y_p))
+            cx_pred, cy_pred = (
+                int(bbox_pred[0]+bbox_pred[2]/2), 
+                int(bbox_pred[1]+bbox_pred[3]/2),
+            )
+            cx_pred, cy_pred = (
+                int(cx_pred*img_scaler[0]), 
+                int(cy_pred*img_scaler[1]),
+            )
+        else:
+            raise ValueError('Invalid input')
+        
+        viz_pred = 0 if (cx_pred == 0 and cy_pred == 0) else 1
+        pred_dict["x"].append(cx_pred)
+        pred_dict["y"].append(cy_pred)
+        pred_dict["visibility"].append(viz_pred)
+    
+    return pred_dict

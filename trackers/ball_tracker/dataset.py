@@ -69,7 +69,7 @@ class BallTrajectoryDataset(Dataset):
                                     of input sequences
                 data_mode (str): Data mode
                     Choices:
-                        - 'heatmap':Return TrackNet input data
+                        - 'heatmap': Return TrackNet input data
                         - 'coordinate': Return InpaintNet input data
                 bg_mode (str): Background mode
                     Choices:

@@ -211,7 +211,7 @@ class KeypointsTracker:
         if self.fixed_keypoints_detection is not None:
             keypoints_detections = [
                 self.fixed_keypoints_detection
-                for _ in range(len(frames))
+                for _ in frames
             ]
             print("-"*20)
             print("USING FIXED KEYPOINTS DETECTION")
