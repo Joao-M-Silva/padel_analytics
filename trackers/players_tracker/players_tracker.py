@@ -171,129 +171,164 @@ class Player:
         )
 
         return frame
+    
+
+class Players:
+
+    def __init__(self, players: list[Player]):
+        self.players = players
+
+    def __len__(self) -> int:
+        return len(self.players)
+
+    def __iter__(self) -> Iterable[Player]:
+        return (player for player in self.players)
+    
+    def __getitem__(self, i: int) -> Player:
+        return self.players[i]
 
 
 class PlayerTracker(Tracker):
 
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    
+    CONF = 0.5
+    IOU = 0.7
+    IMGSZ = 640
+
     def __init__(
         self, 
         model_path: str,
         video_info: sv.VideoInfo,
         polygon_zone: sv.PolygonZone,
     ):
+        """
+        Player predictions are filtered by the polygon_zone 
+        """
+        
+        super().__init__()
+
         self.model = YOLO(model_path)
         self.video_info = video_info
         self.byte_track = sv.ByteTrack(frame_rate=video_info.fps)
         self.polygon_zone = polygon_zone
 
-    def detect_frame(self, frame: np.ndarray) -> list[Player]:
-        result = self.model.predict(
-            frame, 
-            conf=0.5,
-            iou=0.7,
-            imgsz=640,
+    def predict_frames(self, frames: Iterable[np.ndarray]) -> list[Players]:
+        """
+        Prediction over a sample of frames
+        """
+        results = self.model.predict(
+            frames, 
+            conf=self.CONF,
+            iou=self.IOU,
+            imgsz=self.IMGSZ,
             device=self.DEVICE,
             # max_det=4,
             classes=[0],
-        )[0]
-        detections = sv.Detections.from_ultralytics(result)
-        detections = detections[
-            self.polygon_zone.trigger(detections)
-        ]
-        detections = self.byte_track.update_with_detections(detections=detections)
-        
-        players = []
-        for i in range(len(detections)):
-            detection = detections[i]
-            players.append(Player(detection=detections[i]))
+        )
 
-        return players
+        predictions = []
+        for result in results:
+            detections = sv.Detections.from_ultralytics(result)
+            detections = detections[
+                self.polygon_zone.trigger(detections)
+            ]
+            detections = self.byte_track.update_with_detections(
+                detections=detections,
+            )
+
+            predictions.append(
+                Players(
+                    [
+                        Player(detection=detections[i])
+                        for i in range(len(detections))
+                    ]
+                )
+            )
+
+        return predictions
     
-    def parse_detections(
+    def parse_predictions(
         self, 
-        detections: list[list[Player]],
+        predictions: list[Players],
     ) -> list:
-        parsable_detections = []
-        for detection in detections:
-            parsable_detections.append(
+        parsable_predictions = []
+        for players in predictions:
+            parsable_predictions.append(
                 [
                     player.to_dict()
-                    for player in detection
+                    for player in players
                 ]
             )
 
-        return parsable_detections
+        return parsable_predictions
     
-    def load_detections(
+    def load_predictions(
         self, 
         path: str | Path,
-    ) -> list[list[Player]]:
+    ) -> list[Players]:
         
         print("Loading Players Detections ...")
 
         with open(path, "r") as f:
-            parsable_player_detections = json.load(f)
+            parsable_players_predictions = json.load(f)
 
-        players_detections = []
-        for player_detection in parsable_player_detections:
-            players_detections.append(
-                [
-                    Player.from_dict(player)
-                    for player in player_detection
-                ]
+        predictions = []
+        for players in parsable_players_predictions:
+            predictions.append(
+                Players(
+                    [
+                        Player.from_dict(player)
+                        for player in players
+                    ]
+                )
             )
         
         print("Done.")
 
-        return players_detections
+        return predictions
+    
+    def processor(self, frame: np.ndarray) -> np.ndarray:
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         
-    def detect_frames(
+    def predict(
         self, 
-        frames: Iterable[np.ndarray],
+        frame_generator: Iterable[np.ndarray],
+        batch_size: int,
         save_path: str | Path = None,
         load_path: str | Path = None,
-    ) -> list[list[Player]]:
+    ) -> list[Players]:
         
         if load_path is not None:
-            player_detections = self.load_detections(load_path)
-            
-            return player_detections
+            return self.load_predictions(load_path)
         
+        print("Running Player Tracker ...")
+        print("DEVICE: ", self.DEVICE)
         self.model.to(self.DEVICE)
         
-        # YOLO models don't have batch prediction
-        player_detections = []
-        for frame in frames:
-            frame = cv2.cvtColor(
-                frame, 
-                cv2.COLOR_BGR2RGB,
-            )
-            players = self.detect_frame(frame)
-            player_detections.append(players)
+        predictions = []
+        for frames in self.sampler(frame_generator, batch_size): 
+            players_predictions = self.predict_frames(frames)
+            predictions += players_predictions
 
         if save_path is not None and load_path is None:
 
-            print("Saving Players Detections...")
+            print("Saving Players Predictions ...")
 
-            parsed_detections = self.parse_detections(player_detections)
+            parsed_predictions = self.parse_predictions(predictions)
             with open(save_path, "w") as f:
-                json.dump(
-                    parsed_detections,
-                    f,
-                )
+                json.dump(parsed_predictions, f)
 
             print("Done.")
 
         self.model.to("cpu")
+
+        print("Done.")
         
-        return player_detections
+        return predictions
     
     def draw_single_frame(
         self, 
         frame: np.ndarray, 
-        players_detection: list[Player],
+        players_detection: Players,
     ) -> np.ndarray:
         for player in players_detection:
             frame = player.draw(frame, self.video_info)
@@ -303,7 +338,7 @@ class PlayerTracker(Tracker):
     def draw_multiple_frames(
         self, 
         frames: Iterable[np.ndarray], 
-        players_detections: list[list[Player]],
+        players_detections: list[Players],
     ) -> list[np.ndarray]:
         output_frames = []
         for frame, players_detection in zip(frames, players_detections):
