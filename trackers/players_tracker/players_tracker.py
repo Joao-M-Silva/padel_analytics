@@ -1,4 +1,4 @@
-from typing import Iterable, Literal
+from typing import Iterable, Literal, Type, Optional
 import json
 from pathlib import Path
 import numpy as np
@@ -8,15 +8,17 @@ from ultralytics import YOLO
 import supervision as sv
 
 from utils import converters
-from trackers.tracker import Tracker
+from trackers.tracker import Object, Tracker
 
 
 class Player:
 
     """
-    Definition of a player
-
-    Note - projection: player position mini court projection 
+    Player detection in a given video frame
+    
+    Attributes:
+        detection: player bounding box detection
+        projection: player position in a 2D court projection
     """
 
     def __init__(
@@ -27,7 +29,11 @@ class Player:
         self.detection = detection
         self.projection = projection
         self.xyxy = detection.xyxy[0]
-        self.id = int(detection.tracker_id[0]) if detection.tracker_id else None
+        self.id = (
+            int(detection.tracker_id[0]) 
+            if detection.tracker_id 
+            else None
+        )
         self.class_id = int(detection.class_id[0])
         self.confidence = float(detection.confidence[0])
        
@@ -68,7 +74,7 @@ class Player:
         )
     
     @classmethod
-    def from_dict(cls, x: dict):
+    def from_json(cls, x: dict):
         try:
             projection = x["projection"]
         except KeyError:
@@ -82,7 +88,7 @@ class Player:
         )
         return cls(detection=detection, projection=projection)
 
-    def to_dict(self) -> dict:
+    def serialize(self) -> dict:
         return {
             "id": self.id,
             "xyxy": [float(p) for p in self.xyxy],
@@ -103,6 +109,15 @@ class Player:
         ] = "rectangle_bounding_box",
         show_confidence: bool = True,
     ) -> np.ndarray:
+        """
+        Draw player detection in a given frame
+
+        Parameters:
+            frame: frame of interest
+            video_info: source video information like fps and resolution
+            annotator: bounding box style
+            show_confidence: True to write detection confidence
+        """
 
         thickness = sv.calculate_optimal_line_thickness(
             resolution_wh=video_info.resolution_wh,
@@ -117,7 +132,11 @@ class Player:
             "ellipse": sv.EllipseAnnotator,
         }
 
-        box_annotator = annotators[annotator](thickness=thickness, color=sv.Color.BLUE)
+        box_annotator = annotators[annotator](
+            thickness=thickness, 
+            color=sv.Color.BLUE,
+        )
+
         label_annotator = sv.LabelAnnotator(
             text_position=sv.Position.TOP_CENTER,
             text_scale=text_scale,
@@ -150,33 +169,57 @@ class Player:
         )
     
     def draw_projection(self, frame: np.ndarray) -> np.ndarray:
-        cv2.circle(
-            frame,
-            self.projection,
-            8,
-            (0, 0, 255),
-            -1,
-        )
-        cv2.putText(
-            frame, 
-            str(self.id),
-            (
-                self.projection[0], 
-                self.projection[1] - 10,
-            ),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.9,
-            (0, 0, 255),
-            2,
-        )
+        if self.projection:
+            cv2.circle(
+                frame,
+                self.projection,
+                8,
+                (0, 0, 255),
+                -1,
+            )
 
-        return frame
+            cv2.putText(
+                frame, 
+                str(self.id),
+                (
+                    self.projection[0], 
+                    self.projection[1] - 10,
+                ),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.9,
+                (0, 0, 255),
+                2,
+            )
+
+            return frame
+        else:
+            raise ValueError("Inexistent projection.")
     
 
-class Players:
+class Players(Object):
+
+    """
+    Players detection in a given video frame
+    """
 
     def __init__(self, players: list[Player]):
+        super().__init__()
         self.players = players
+
+    @classmethod
+    def from_json(cls, x: dict | list[dict]) -> "Players":
+        return cls(
+            players=[
+                Player.from_json(player_json)
+                for player_json in x
+            ]
+        )
+
+    def serialize(self) -> list[dict]:
+        return [
+            player.serialize()
+            for player in self.players
+        ]
 
     def __len__(self) -> int:
         return len(self.players)
@@ -186,6 +229,38 @@ class Players:
     
     def __getitem__(self, i: int) -> Player:
         return self.players[i]
+    
+    def draw(
+        self, 
+        frame: np.ndarray, 
+        video_info: sv.VideoInfo,
+        annotator: Literal[
+            "rectangle_bounding_box",
+            "round_bounding_box",
+            "corner_bounding_box",
+            "ellipse"
+        ] = "rectangle_bounding_box",
+        show_confidence: bool = True,
+    ) -> np.ndarray:
+        """
+        Draw players detection in a given frame
+
+        Parameters:
+            frame: frame of interest
+            video_info: source video information like fps and resolution
+            annotator: bounding box style
+            show_confidence: True to write detection confidence
+        """
+    
+        for player in self.players:
+            frame = player.draw(
+                frame, 
+                video_info, 
+                annotator, 
+                show_confidence,
+            )
+
+        return frame
 
 
 class PlayerTracker(Tracker):
@@ -194,29 +269,76 @@ class PlayerTracker(Tracker):
     IOU = 0.7
     IMGSZ = 640
 
+    """
+    Tracker of players object
+
+    Attributes:
+        model_path: yolo model path
+        annotator: bounding box style
+        show_confidence: True to write detection confidence 
+        load_path: serializable tracker results path 
+        save_path: path to save serializable tracker results
+    """
+
     def __init__(
         self, 
         model_path: str,
-        video_info: sv.VideoInfo,
         polygon_zone: sv.PolygonZone,
+        annotator: Literal[
+            "rectangle_bounding_box",
+            "round_bounding_box",
+            "corner_bounding_box",
+            "ellipse"
+        ] = "rectangle_bounding_box",
+        show_confidence: bool = True,
+        load_path: Optional[str | Path] = None,
+        save_path: Optional[str | Path] = None,
     ):
-        """
-        Player predictions are filtered by the polygon_zone 
-        """
-        
-        super().__init__()
+        super().__init__(
+            load_path=load_path,
+            save_path=save_path,
+        )
 
         self.model = YOLO(model_path)
+        self.polygon_zone = polygon_zone
+        self.annotator = annotator
+        self.show_confidence = show_confidence
+
+    def video_info_post_init(self, video_info: sv.VideoInfo) -> "PlayerTracker":
         self.video_info = video_info
         self.byte_track = sv.ByteTrack(frame_rate=video_info.fps)
-        self.polygon_zone = polygon_zone
+        return self
 
-    def predict_frames(self, frames: Iterable[np.ndarray]) -> list[Players]:
+    def object(self) -> Type[Object]:
+        return Players
+
+    def draw_kwargs(self) -> dict:
+        return {
+            "video_info": self.video_info,
+            "annotator": self.annotator,
+            "show_confidence": self.show_confidence,
+        }
+    
+    def __str__(self) -> str:
+        return "players_tracker"
+    
+    def restart(self) -> None:
+        """
+        Reset the tracking results
+        """
+        self.results.restart()
+        print(f"{self.__str__()}: Byte tracker reset")
+        self.byte_track.reset()
+
+    def processor(self, frame: np.ndarray) -> np.ndarray:
+        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+    def predict_sample(self, sample: Iterable[np.ndarray]) -> list[Players]:
         """
         Prediction over a sample of frames
         """
         results = self.model.predict(
-            frames, 
+            sample, 
             conf=self.CONF,
             iou=self.IOU,
             imgsz=self.IMGSZ,
@@ -245,104 +367,4 @@ class PlayerTracker(Tracker):
             )
 
         return predictions
-    
-    def parse_predictions(
-        self, 
-        predictions: list[Players],
-    ) -> list:
-        parsable_predictions = []
-        for players in predictions:
-            parsable_predictions.append(
-                [
-                    player.to_dict()
-                    for player in players
-                ]
-            )
-
-        return parsable_predictions
-    
-    def load_predictions(
-        self, 
-        path: str | Path,
-    ) -> list[Players]:
         
-        print("Loading Players Detections ...")
-
-        with open(path, "r") as f:
-            parsable_players_predictions = json.load(f)
-
-        predictions = []
-        for players in parsable_players_predictions:
-            predictions.append(
-                Players(
-                    [
-                        Player.from_dict(player)
-                        for player in players
-                    ]
-                )
-            )
-        
-        print("Done.")
-
-        return predictions
-    
-    def processor(self, frame: np.ndarray) -> np.ndarray:
-        return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        
-    def predict(
-        self, 
-        frame_generator: Iterable[np.ndarray],
-        batch_size: int,
-        save_path: str | Path = None,
-        load_path: str | Path = None,
-    ) -> list[Players]:
-        
-        if load_path is not None:
-            return self.load_predictions(load_path)
-        
-        print("Running Player Tracker ...")
-        print("DEVICE: ", self.DEVICE)
-        self.model.to(self.DEVICE)
-        
-        predictions = []
-        for frames in self.sampler(frame_generator, batch_size): 
-            players_predictions = self.predict_frames(frames)
-            predictions += players_predictions
-
-        if save_path is not None and load_path is None:
-
-            print("Saving Players Predictions ...")
-
-            parsed_predictions = self.parse_predictions(predictions)
-            with open(save_path, "w") as f:
-                json.dump(parsed_predictions, f)
-
-            print("Done.")
-
-        self.model.to("cpu")
-
-        print("Done.")
-        
-        return predictions
-    
-    def draw_single_frame(
-        self, 
-        frame: np.ndarray, 
-        players_detection: Players,
-    ) -> np.ndarray:
-        for player in players_detection:
-            frame = player.draw(frame, self.video_info)
-
-        return frame
-    
-    def draw_multiple_frames(
-        self, 
-        frames: Iterable[np.ndarray], 
-        players_detections: list[Players],
-    ) -> list[np.ndarray]:
-        output_frames = []
-        for frame, players_detection in zip(frames, players_detections):
-            frame = self.draw_single_frame(frame, players_detection)
-            output_frames.append(frame)
-
-        return output_frames
