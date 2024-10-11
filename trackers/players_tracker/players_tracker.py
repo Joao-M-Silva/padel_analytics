@@ -8,7 +8,7 @@ from ultralytics import YOLO
 import supervision as sv
 
 from utils import converters
-from trackers.tracker import Object, Tracker
+from trackers.tracker import Object, Tracker, NoPredictFrames
 
 
 class Player:
@@ -24,7 +24,7 @@ class Player:
     def __init__(
         self, 
         detection: sv.Detections, 
-        projection: tuple[int, int] = None,
+        projection: Optional[tuple[int, int]] = None,
     ):
         self.detection = detection
         self.projection = projection
@@ -265,10 +265,6 @@ class Players(Object):
 
 class PlayerTracker(Tracker):
 
-    CONF = 0.5
-    IOU = 0.7
-    IMGSZ = 640
-
     """
     Tracker of players object
 
@@ -280,10 +276,15 @@ class PlayerTracker(Tracker):
         save_path: path to save serializable tracker results
     """
 
+    CONF = 0.5
+    IOU = 0.7
+    IMGSZ = 640
+
     def __init__(
         self, 
         model_path: str,
         polygon_zone: sv.PolygonZone,
+        batch_size: int,
         annotator: Literal[
             "rectangle_bounding_box",
             "round_bounding_box",
@@ -301,6 +302,7 @@ class PlayerTracker(Tracker):
 
         self.model = YOLO(model_path)
         self.polygon_zone = polygon_zone
+        self.batch_size = batch_size
         self.annotator = annotator
         self.show_confidence = show_confidence
 
@@ -332,11 +334,20 @@ class PlayerTracker(Tracker):
 
     def processor(self, frame: np.ndarray) -> np.ndarray:
         return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    
+    def to(self, device: str) -> None:
+        self.model.to(device)
 
-    def predict_sample(self, sample: Iterable[np.ndarray]) -> list[Players]:
+    def predict_sample(self, sample: Iterable[np.ndarray], **kwargs) -> list[Players]:
         """
         Prediction over a sample of frames
         """
+
+        sample = [
+            self.processor(frame)
+            for frame in sample
+        ]
+
         results = self.model.predict(
             sample, 
             conf=self.CONF,
@@ -367,4 +378,7 @@ class PlayerTracker(Tracker):
             )
 
         return predictions
+    
+    def predict_frames(self, frame_generator: Iterable[np.ndarray], **kwargs):
+        raise NoPredictFrames()
         

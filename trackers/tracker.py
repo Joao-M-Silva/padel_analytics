@@ -1,13 +1,30 @@
 """ Definition of object tracking abstractions """
 
-from typing import Iterable, Optional, Type
+from typing import Iterable, Optional, Type, Literal
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import json
+from tqdm import tqdm
 from pathlib import Path
 import numpy as np
+from PIL import Image
 import torch
 import supervision as sv
+
+
+class NoPredictSample(Exception):
+    """
+    Raise this exception when the tracker predicts based on the
+    frame generator and not based on samples
+    """
+    pass
+
+class NoPredictFrames(Exception):
+    """
+    Raise this exception when the tracker predicts based on samples
+    and not based on a frame generator
+    """
+    pass
 
 
 class Object(ABC):
@@ -113,6 +130,8 @@ class Tracker(ABC):
         save_path: path to save serializable tracker results
     """
 
+    batch_size : int
+
     def __init__(
         self, 
         load_path: Optional[str | Path] = None,
@@ -178,19 +197,6 @@ class Tracker(ABC):
         """
         pass
 
-    @abstractmethod
-    def processor(self, frame: np.ndarray) -> np.ndarray:
-        """
-        Processes a given BGR frame accordingly to the tracker 
-        model input requirements
-
-        Parameters:
-            frame: frame to process 
-        Returns:
-            processed frame
-        """
-        pass
-
     def save_predictions(self) -> None:
         """
         Save parsable predictions
@@ -234,8 +240,17 @@ class Tracker(ABC):
         
         print(f"{self.__str__()}: {self.__len__()} predictions loaded.")
 
+    def to(self, device: Literal["cuda", "cpu"]) -> None:
+        """
+        Move tracker model/models to the given device
+
+        Parameters:
+            device: either cpu or gpu
+        """
+        pass
+
     @abstractmethod
-    def predict_sample(self, sample: Iterable[np.ndarray]) -> list[Object]:
+    def predict_sample(self, sample: Iterable[np.ndarray], **kwargs) -> Optional[list[Object]]:
         """
         Prediction over a sample of frames
 
@@ -243,25 +258,73 @@ class Tracker(ABC):
             sample: sample of processed frames
         Returns:
             sample frames object detections
+        Raises:
+            NoPredictSample when the tracker predicts based on the frame generator
         """
         pass
 
-    def predict_and_update_sample(self, sample: Iterable[np.ndarray]) -> list[Object]:
+    @abstractmethod
+    def predict_frames(self, frame_generator: Iterable[np.ndarray], **kwargs) -> Optional[list[Object]]:
         """
-        Prediction over a sample of frames updating the results
+        Prediction over a video frame generator
+
+        Parameters:
+            sample: sample of processed frames
+        Returns:
+            sample frames object detections
+        Raises:
+            NoPredictFrames when the tracker predicts based on samples
+        """
+        pass
+
+    def predict_and_update(self, frame_generator: Iterable[np.ndarray], **kwargs) -> list[Object]:
+        """
+        Prediction over a video updating the results
 
         Parameters:
             sample: sample of processed frames
         Returns:
             sample frames object detections
         """
-        sample = [
-            self.processor(frame)
-            for frame in sample
-        ]
-        predictions = self.predict_sample(sample)
-        self.results.update(predictions)
 
+        def sampler(
+            generator: Iterable[np.ndarray],
+            sequence_length: int,
+        ) -> Iterable[list[np.ndarray]]:
+            """
+            Sample sequence_length frames 
+
+            Parameters:
+                generator: frame generator
+                sequence_length: number of frames to be retrived
+                drop_last: True to drop the last sequence if its incomplete
+            Returns:
+                a sample of frames
+            """
+            w = []
+            for x in generator:
+                w.append(x)
+
+                if len(w) == sequence_length:
+                    yield w
+                    w = []
+
+            if w != []:
+                yield w
+        
+        try:
+            predictions = self.predict_frames(frame_generator, **kwargs)
+            self.results = predictions
+        except NoPredictFrames:
+            for sample in tqdm(
+                sampler(
+                    frame_generator,
+                    sequence_length=self.batch_size,
+                )
+            ):
+                predictions = self.predict_sample(sample, **kwargs)
+                self.results.update(predictions)
+            
         return predictions
 
 

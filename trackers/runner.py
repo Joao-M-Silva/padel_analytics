@@ -61,33 +61,6 @@ class TrackingRunner:
         """
         for tracker in self.trackers.values():
             tracker.restart()
-    
-    def sampler(
-        self,
-        generator: Iterable[np.ndarray],
-        sequence_length: int,
-        drop_last: bool = False,
-    ) -> Iterable[list[np.ndarray]]:
-        """
-        Sample sequence_length frames 
-
-        Parameters:
-            generator: frame generator
-            sequence_length: number of frames to be retrived
-            drop_last: True to drop the last sequence if its incomplete
-        Returns:
-            a sample of frames
-        """
-        w = []
-        for x in generator:
-            w.append(x)
-
-            if len(w) == sequence_length:
-                yield w
-                w = []
-
-        if not drop_last and w != []:
-            yield w
 
     def draw(self) -> None:
         """
@@ -123,16 +96,11 @@ class TrackingRunner:
 
         print("Done.")
 
-    def run(
-        self, 
-        sequence_length: int,
-        drop_last: bool = False,
-    ) -> None:
+    def run(self) -> None:
         """
         Run trackers object prediction for every frame in the frame generator
 
         Parameters:
-            sequence_length: number of frames in a sample
             drop_last: True to drop the last sample if its incomplete
         """
 
@@ -158,7 +126,7 @@ class TrackingRunner:
                     tracker.restart()
                     print(f"{tracker.__str__()}: WARNING restarted tracker")
 
-            tracker.model.to(tracker.DEVICE)
+            tracker.to(tracker.DEVICE)
             print(f"{str(tracker)}: Running on {tracker.DEVICE} ...")
 
             frame_generator = sv.get_video_frames_generator(
@@ -169,17 +137,13 @@ class TrackingRunner:
             )
 
             t0 = timeit.default_timer()
-            for sample in tqdm(
-                self.sampler(
-                    frame_generator,
-                    sequence_length=sequence_length,
-                    drop_last=drop_last,
-                )
-            ):
-                tracker.predict_and_update_sample(sample)
+            tracker.predict_and_update(
+                frame_generator, 
+                total_frames=self.total_frames,
+            )
             t1 = timeit.default_timer()
 
-            tracker.model.to("cpu")
+            tracker.to("cpu")
 
             print(f"{str(tracker)}: {t1 - t0} inference time.")
 

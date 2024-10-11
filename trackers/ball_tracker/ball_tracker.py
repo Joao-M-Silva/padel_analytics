@@ -1,4 +1,4 @@
-from typing import Literal, Iterable
+from typing import Literal, Iterable, Optional, Type
 from collections import deque
 import json
 from dataclasses import dataclass
@@ -10,38 +10,42 @@ import cv2
 from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader, IterableDataset
 import torch
+import supervision as sv
 
 from trackers.ball_tracker.models import TrackNet, InpaintNet
 from trackers.ball_tracker.dataset import BallTrajectoryDataset
 from trackers.ball_tracker.iterable import BallTrajectoryIterable
 from trackers.ball_tracker.predict import predict, predict_modified
-from trackers.tracker import Tracker
+from trackers.tracker import Object, Tracker, NoPredictSample
+
 
 
 def get_model(
     model_name: Literal["TrackNet", "InpaintNet"], 
     seq_len: int = None, 
     bg_mode: Literal["", "subtract", "subtract_concat", "concat"] = None,
-):
-    """ Create model by name and the configuration parameter.
+) -> torch.nn.Module:
+    """ 
+    Create model by name and the configuration parameter.
 
-        Args:
-            model_name (str): type of model to create
-                Choices:
-                    - 'TrackNet': Return TrackNet model
-                    - 'InpaintNet': Return InpaintNet model
-            seq_len (int, optional): Length of TrackNet input sequence 
-            bg_mode (str, optional): Background mode of TrackNet
-                Choices:
-                    - '': Return TrackNet with L x 3 input channels (RGB)
-                    - 'subtract': Return TrackNet with L x 1 input channel 
-                      (Difference frame)
-                    - 'subtract_concat': Return TrackNet with L x 4 input channels
-                      (RGB + Difference frame)
-                    - 'concat': Return TrackNet with (L+1) x 3 input channels (RGB)
+    Parameters:
+        model_name: type of model to create
+            Choices:
+                - 'TrackNet': Return TrackNet model
+                - 'InpaintNet': Return InpaintNet model
+        
+        seq_len: length of TrackNet input sequence 
+        bg_mode: background mode of TrackNet
+            Choices:
+                - '': return TrackNet with L x 3 input channels (RGB)
+                - 'subtract': return TrackNet with L x 1 input channel 
+                    (Difference frame)
+                - 'subtract_concat': return TrackNet with L x 4 input channels
+                    (RGB + Difference frame)
+                - 'concat': return TrackNet with (L+1) x 3 input channels (RGB)
 
-        Returns:
-            model (torch.nn.Module): Model with specified configuration
+    Returns:
+        model with specified configuration
     """
 
     if model_name == 'TrackNet':
@@ -61,18 +65,22 @@ def get_model(
     return model
 
 
-def get_ensemble_weight(seq_len, eval_mode):
-    """ Get weight for temporal ensemble.
+def get_ensemble_weight(
+    seq_len: int, 
+    eval_mode: Literal["average", "weight"],
+) -> torch.Tensor:
+    """ 
+    Get weight for temporal ensemble.
 
-        Args:
-            seq_len (int): Length of input sequence
-            eval_mode (str): Mode of temporal ensemble
-                Choices:
-                    - 'average': Return uniform weight
-                    - 'weight': Return positional weight
+    Parameters:
+        seq_len: Length of input sequence
+        eval_mode: Mode of temporal ensemble
+            Choices:
+                - 'average': return uniform weight
+                - 'weight': return positional weight
         
         Returns:
-            weight (torch.Tensor): Weight for temporal ensemble
+            weight for temporal ensemble
     """
 
     if eval_mode == 'average':
@@ -88,16 +96,18 @@ def get_ensemble_weight(seq_len, eval_mode):
     
     return weight
 
-def generate_inpaint_mask_modified(pred_dict, th_h=30):
-    """ Generate inpaint mask form predicted trajectory.
 
-        Args:
-            pred_dict (Dict): Prediction result
-                Format: {'Frame':[], 'X':[], 'Y':[], 'Visibility':[]}
-            th_h (float): Height threshold (pixels) for y coordinate
+def generate_inpaint_mask(pred_dict: dict, th_h: float=30) -> list:
+    """ 
+    Generate inpaint mask form predicted trajectory.
+
+    Parameters:
+        pred_dict: prediction result
+            Format: {'Frame':[], 'X':[], 'Y':[], 'Visibility':[]}
+        th_h: height threshold (pixels) for y coordinate
         
-        Returns:
-            inpaint_mask (List): Inpaint mask
+    Returns:
+        inpaint mask
     """
     y = np.array(pred_dict['y'])
     vis_pred = np.array(pred_dict['visibility'])
@@ -126,49 +136,10 @@ def generate_inpaint_mask_modified(pred_dict, th_h=30):
     return inpaint_mask.tolist()
 
 
-def generate_inpaint_mask(pred_dict, th_h=30):
-    """ Generate inpaint mask form predicted trajectory.
-
-        Args:
-            pred_dict (Dict): Prediction result
-                Format: {'Frame':[], 'X':[], 'Y':[], 'Visibility':[]}
-            th_h (float): Height threshold (pixels) for y coordinate
-        
-        Returns:
-            inpaint_mask (List): Inpaint mask
-    """
-    y = np.array(pred_dict['Y'])
-    vis_pred = np.array(pred_dict['Visibility'])
-    inpaint_mask = np.zeros_like(y)
-    i = 0 # index that ball start to disappear
-    j = 0 # index that ball start to appear
-    threshold = th_h
-    while j < len(vis_pred):
-        while i < len(vis_pred)-1 and vis_pred[i] == 1:
-            i += 1
-        j = i
-        while j < len(vis_pred)-1 and vis_pred[j] == 0:
-            j += 1
-        if j == i:
-            break
-        elif i == 0 and y[j] > threshold:
-            # start from the first frame that ball disappear
-            inpaint_mask[:j] = 1
-        elif (i > 1 and y[i-1] > threshold) and (j < len(vis_pred) and y[j] > threshold):
-            inpaint_mask[i:j] = 1
-        else:
-            # ball is out of the field of camera view 
-            pass
-        i = j
-    
-    return inpaint_mask.tolist()
-
-
-@dataclass
-class Ball:
+class Ball(Object):
 
     """
-    Definition of a ball 
+    Ball detection in a given video frame
 
     Attributes:
         frame: frame associated with the given ball detection
@@ -177,37 +148,52 @@ class Ball:
         projection: ball position mini court projection 
     """
 
-    frame: int
-    xy: tuple[float, float]
-    visibility: Literal[0, 1]
-    projection: tuple[int, int] = None
+    def __init__(
+        self, 
+        frame: int, 
+        xy: tuple[float, float], 
+        visibility: Literal[0,1],
+        projection: Optional[tuple[int, int]] = None                    
+    ):
+        super().__init__()
+
+        self.frame = frame
+        self.xy = xy
+        self.visibility = visibility
+        self.projection = projection
 
     @classmethod
-    def from_dict(cls, x: dict):
+    def from_json(cls, x: dict):
         return cls(**x)
 
-    def to_dict(self) -> dict:
+    def serialize(self) -> dict:
         return {
             "frame": self.frame,
             "xy": self.xy,
             "visibility": self.visibility,
+            "projection": self.projection,
         }
     
     def asint(self) -> tuple[int, int]:
         return tuple(int(v) for v in self.xy)
     
     def draw(self, frame: np.ndarray) -> np.ndarray:
+        """
+        Draw ball detection in a given frame
+        """
+
         cv2.circle(
             frame,
-            tuple(int(x) for x in self.xy),
+            self.asint(),
             6,
-            (255, 255, 0),
+            (0, 255, 0),
             -1,
         )
 
         return frame
     
     def draw_projection(self, frame: np.ndarray) -> np.ndarray:
+        
         cv2.circle(
             frame,
             self.projection,
@@ -222,15 +208,23 @@ class Ball:
 class BallTracker(Tracker):
 
     """
-    MAX_SAMPLE_NUM is the maximum number of frames to sample for 
-    generating median image.
-    Note: its important to filter frames of interest before 
-    feeding the video to the model
+    Tracker of ball object
+
+    Attributes:
+        tracking_model_path: tracknet model path
+        inpainting_model_path: inpainting model path
+        median_max_sample_num: maximum number of frames to sample for 
+            generating median image
+        median: background estimation
+        load_path: serializable tracker results path 
+        save_path: path to save serializable tracker results
+
+    Note: 
+        its important to filter frames of interest before feeding the 
+        video to the model
     """
 
-    DEVICE: str = "cuda" if torch.cuda.is_available() else "cpu"
     EVAL_MODE: str = "weight"
-    MAX_SAMPLE_NUM: int = 1800
     TRAJECTORY_LENGTH: int = 8
     
     HEIGHT: int = 288
@@ -242,12 +236,25 @@ class BallTracker(Tracker):
         self, 
         tracking_model_path: str,
         inpainting_model_path: str,
+        batch_size: int,
+        median_max_sample_num: int = 1800, 
+        median: Optional[np.ndarray] = None,
+        load_path: Optional[str | Path] = None,
+        save_path: Optional[str | Path] = None,
     ):
+        super().__init__(
+            load_path=load_path,
+            save_path=save_path,
+        )
+
         self.DELTA_T: float = 1 / math.sqrt(self.HEIGHT**2 + self.WIDTH**2)
         self.COOR_TH = self.DELTA_T * 50
 
         tracknet_ckpt = torch.load(tracking_model_path)
         self.tracknet_seq_len = tracknet_ckpt['param_dict']['seq_len']
+
+        assert self.tracknet_seq_len == self.TRAJECTORY_LENGTH
+
         self.bg_mode = tracknet_ckpt['param_dict']['bg_mode']
 
         self.tracknet = get_model(
@@ -266,19 +273,28 @@ class BallTracker(Tracker):
         else:
             self.inpaintnet = None
 
-    def load_detections(self, path: str | Path) -> list[Ball]:
+        self.batch_size = batch_size
+        self.median_max_sample_num = median_max_sample_num
+        self.median = median
+    
+    def video_info_post_init(self, video_info: sv.VideoInfo) -> "BallTracker":
+        self.video_info = video_info
+        return self
+    
+    def object(self) -> Type[Object]:
+        return Ball
+    
+    def draw_kwargs(self) -> dict:
+        return {}
+    
+    def __str__(self) -> str:
+        return "ball_tracker"
+    
+    def restart(self) -> None:
+        self.results.restart()
 
-        print("Loading Ball Detections")
-
-        with open(path, "r") as f:
-            parsable_ball_detections = json.load(f)
-
-        print("Done.")
-
-        return [
-            Ball.from_dict(ball_detection)
-            for ball_detection in parsable_ball_detections
-        ]
+    def processor(self, frame: np.ndarray):
+        pass
     
     def draw_traj(self, img, traj, radius=3, color='red') -> np.ndarray:
         """ Draw trajectory on the image.
@@ -345,32 +361,24 @@ class BallTracker(Tracker):
             k: pred_dict[v]
             for k, v in mapping.items()
         }
-
-    def detect_frames(
-        self,
-        frames: Iterable[np.ndarray],
-        total_frames: int,
-        width: int,
-        height: int,
-        batch_size: int = 1,
-        save_path: str | Path = None,
-        load_path: str | Path = None,
-        median: np.ndarray = None,
-        median_range: int = 300,
-    ) -> list[Ball]:
-        
-        if load_path is not None:
-            ball_detections = self.load_detections(load_path)
-
-            return ball_detections
-
-        self.tracknet.to(self.DEVICE)
+    
+    def to(self, device: str) -> None:
+        self.tracknet.to(device)
         if self.inpaintnet is not None:
-            self.inpaintnet.to(self.DEVICE)
+            self.inpaintnet.to(device)
+
+    def predict_sample(self, sample: Iterable[np.ndarray], **kwargs):
+        raise NoPredictSample()
+
+    def predict_frames(
+        self,
+        frame_generator: Iterable[np.ndarray],
+        total_frames: int,
+    ) -> list[Ball]:
 
         w_scaler, h_scaler = (
-            width / self.WIDTH, 
-            height / self.HEIGHT,
+            self.video_info.width / self.WIDTH, 
+            self.video_info.height / self.HEIGHT,
         )
 
         img_scaler = (w_scaler, h_scaler)
@@ -382,7 +390,7 @@ class BallTracker(Tracker):
             'visibility':[], 
             'inpaint_mask': [],
             'img_scaler': img_scaler, 
-            'img_shape': (width, height),
+            'img_shape': (self.video_info.width, self.video_info.height),
         }
 
         seq_len = self.tracknet_seq_len
@@ -392,18 +400,18 @@ class BallTracker(Tracker):
             sliding_step=1,
             data_mode="heatmap",
             bg_mode="concat",
-            frame_generator=frames,
+            frame_generator=frame_generator,
             HEIGHT=self.HEIGHT,
             WIDTH=self.WIDTH,
             SIGMA=2.5,
             IMG_FORMAT="png",
-            median=median,
-            median_range=median_range,
+            median=self.median,
+            median_range=self.median_max_sample_num,
         )
 
         data_loader = DataLoader(
             iterable,
-            batch_size=batch_size,
+            batch_size=self.batch_size,
             shuffle=False,
             drop_last=False,
         )
@@ -517,8 +525,8 @@ class BallTracker(Tracker):
         if self.inpaintnet is not None:
             self.inpaintnet.eval()
             seq_len = self.inpaintnet_seq_len
-            tracknet_pred_dict["inpaint_mask"] = generate_inpaint_mask_modified(
-                tracknet_pred_dict, th_h=height*0.05,
+            tracknet_pred_dict["inpaint_mask"] = generate_inpaint_mask(
+                tracknet_pred_dict, th_h=self.video_info.height*0.05,
             )
             inpaint_pred_dict = {
                 'Frame':[], 
@@ -540,7 +548,7 @@ class BallTracker(Tracker):
             )
             data_loader = DataLoader(
                 dataset, 
-                batch_size=batch_size, 
+                batch_size=self.batch_size, 
                 shuffle=False, 
                 drop_last=False,
             ) # num_workers=num_workers, 
@@ -675,27 +683,6 @@ class BallTracker(Tracker):
                     visibility=pred_dict["Visibility"][i]
                 )
             )
-
-        if save_path is not None:
-
-            print("Saving Ball Detections...")
-
-            parsable_ball_detections = [
-                ball_detection.to_dict()
-                for ball_detection in ball_detections
-            ]
-
-            with open(save_path, "w") as f:
-                json.dump(
-                    parsable_ball_detections,
-                    f,
-                )
-            
-            print("Done.")
-        
-        self.tracknet.to("cpu")
-        if self.inpaintnet is not None:
-            self.inpaintnet.to("cpu")
         
         return ball_detections
 
