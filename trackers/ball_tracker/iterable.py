@@ -1,6 +1,7 @@
 from typing import Literal, Iterable
 import numpy as np
 from PIL import Image
+import cv2
 from torch.utils.data import IterableDataset
 
 
@@ -59,6 +60,7 @@ class BallTrajectoryIterable(IterableDataset):
                 if median is None:
                     print("Calculating median ...")
                     for frame in self.frame_generator:
+                        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         self.frames_in_memory.append(frame)
                         if len(self.frames_in_memory) == median_range:
                             break
@@ -153,6 +155,7 @@ class BallTrajectoryIterable(IterableDataset):
     ) -> Iterable[np.array]:
         w = []
         for x in generator:
+            x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
             w.append(x)
 
             if len(w) == sequence_length:
