@@ -1,4 +1,7 @@
 # Padel Analytics
+
+![test_all_detections_validonline-video-cutter com-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/77c40885-b38e-42f8-b9dc-08ea35ea5113)
+
 This repository applies computer vision techniques to extract valuable insights from a padel game recording like:
 - Position and velocity of each player;
 - Position and velocity of the ball;
