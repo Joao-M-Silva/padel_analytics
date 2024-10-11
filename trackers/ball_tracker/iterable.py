@@ -59,12 +59,14 @@ class BallTrajectoryIterable(IterableDataset):
             if self.bg_mode:
                 if median is None:
                     print("Calculating median ...")
+                    print("1. Getting frames")
                     for frame in self.frame_generator:
                         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                         self.frames_in_memory.append(frame)
                         if len(self.frames_in_memory) == median_range:
                             break
                     
+                    print("2. Calculating")
                     median = np.median(
                         np.array(self.frames_in_memory), 
                         0,
