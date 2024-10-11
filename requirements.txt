@@ -1,2 +1,10 @@
-pims
 av
+ffmpeg
+matplotlib
+opencv-python
+pims
+plotly
+seaborn 
+supervision
+ultralytics
+
