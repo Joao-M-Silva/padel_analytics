@@ -9,6 +9,10 @@ OUTPUT_VIDEO_PATH = "test_dev.mp4"
 # Maximum number of frames to be analysed
 MAX_FRAMES = 300
 
+# Fixed court keypoints´
+FIXED_COURT_KEYPOINTS_LOAD_PATH = "./cache/fixed_keypoints_detection.json"
+FIXED_COURT_KEYPOINTS_SAVE_PATH = None # "./cache/fixed_keypoints_detection.json"
+
 # Players tracker
 PLAYERS_TRACKER_MODEL = "./yolov8m.pt"
 PLAYERS_TRACKER_BATCH_SIZE = 8
@@ -32,7 +36,6 @@ BALL_TRACKER_LOAD_PATH = "./cache/ball_detections.json"
 BALL_TRACKER_SAVE_PATH = "./cache/ball_detections.json"
 
 # Court keypoints tracker
-KEYPOINTS_TRACKER_FIXED_PATH = "./cache/fixed_keypoints_detection.json"
 KEYPOINTS_TRACKER_MODEL = "./runs/keypoints/train2/weights/best.pt"
 KEYPOINTS_TRACKER_BATCH_SIZE = 8
 KEYPOINTS_TRACKER_MODEL_TYPE = "yolo"

@@ -68,23 +68,40 @@ if __name__ == "__main__":
         video_info.height,
         video_info.total_frames,
     )
-    
+
     first_frame_generator = sv.get_video_frames_generator(
         INPUT_VIDEO_PATH,
         start=0,
         stride=1,
         end=1,
     )
-    img = next(first_frame_generator)
-    cv2.imshow('frame', img)
- 
-    cv2.setMouseCallback('frame', click_event) 
 
-    # wait for a key to be pressed to exit 
-    cv2.waitKey(0) 
-  
-    # close the window 
-    cv2.destroyAllWindows() 
+    img = next(first_frame_generator)
+
+    if FIXED_COURT_KEYPOINTS_LOAD_PATH is not None:
+        with open(FIXED_COURT_KEYPOINTS_LOAD_PATH, "r") as f:
+            SELECTED_KEYPOINTS = json.load(f)
+    else:
+        cv2.imshow('frame', img)
+        cv2.setMouseCallback('frame', click_event) 
+        # wait for a key to be pressed to exit 
+        cv2.waitKey(0) 
+        # close the window 
+        cv2.destroyAllWindows() 
+
+    if FIXED_COURT_KEYPOINTS_SAVE_PATH is not None:
+        with open(FIXED_COURT_KEYPOINTS_SAVE_PATH, "w") as f:
+            json.dump(SELECTED_KEYPOINTS, f)
+
+    fixed_keypoints_detection = Keypoints(
+        [
+            Keypoint(
+                id=i,
+                xy=tuple(float(x) for x in v)
+            )
+            for i, v in enumerate(SELECTED_KEYPOINTS)
+        ]
+    )
 
     keypoints_array = np.array(SELECTED_KEYPOINTS)
     # Polygon to filter person detections inside padel court
@@ -100,22 +117,6 @@ if __name__ == "__main__":
         ),
         frame_resolution_wh=video_info.resolution_wh,
     )
-
-    fixed_keypoints_detection = Keypoints(
-        [
-            Keypoint(
-                id=i,
-                xy=tuple(float(x) for x in v)
-            )
-            for i, v in enumerate(SELECTED_KEYPOINTS)
-        ]
-    )
-
-    if KEYPOINTS_TRACKER_FIXED_PATH is not None:
-        fixed_keypoints_detection_path = KEYPOINTS_TRACKER_FIXED_PATH
-        with open(fixed_keypoints_detection_path, "w") as f:
-            json.dump(SELECTED_KEYPOINTS, f)
-
 
     # FILTER FRAMES OF INTEREST (TODO)
 
