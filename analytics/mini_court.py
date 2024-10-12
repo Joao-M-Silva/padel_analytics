@@ -639,7 +639,43 @@ class MiniCourt:
 
         return output_frames, data_analytics
     
-    
+    """
+    WORKAROUND
+    """
+
+
+    def draw_minicourt_with_projections_test(
+        self, 
+        frame: np.ndarray,
+        fixed_keypoints_detection: list[Keypoint],
+        players_detection: list[Player],
+        ball_detection: Ball,
+        data_analytics: DataAnalytics = None,
+    ):
+
+        # SUBOPTIMAL
+        print("Fixed Keypoints Detection: ")
+        print(fixed_keypoints_detection)
+        print("With lenght: ", len(fixed_keypoints_detection))
+        print("-"*20)
+        homography_matrix = self.homography_matrix(fixed_keypoints_detection)
+        
+        
+        output_frame = self.draw_background_single_frame(frame)
+        output_frame = self.draw_mini_court_single_frame(output_frame)
+        output_frame = self.draw_projected_players(
+            output_frame, 
+            players_detection=players_detection,
+            homography_matrix=homography_matrix,
+            data_analytics=data_analytics,
+        )
+        output_frame = self.draw_projected_ball(
+            output_frame,
+            ball_detection=ball_detection,
+            homography_matrix=homography_matrix,
+        )
+
+        return output_frame, data_analytics
 
     
 

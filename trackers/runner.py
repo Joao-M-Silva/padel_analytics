@@ -2,15 +2,15 @@
 Implementation of a runner to extract results from an arbitrary list of trackers 
 """
 
-from typing import Iterable, Optional
+from typing import Optional
 from tqdm import tqdm
 import timeit
 from pathlib import Path
-import numpy as np
 import cv2
 import supervision as sv
 
-from trackers.tracker import Object, TrackingResults, Tracker
+from trackers.tracker import Tracker
+from analytics import MiniCourt, DataAnalytics
 
 
 class TrackingRunner:
@@ -62,7 +62,7 @@ class TrackingRunner:
         for tracker in self.trackers.values():
             tracker.restart()
 
-    def draw(self) -> None:
+    def draw(self, mini_court: MiniCourt, fixed_keypoints_detection) -> None:
         """
         Draw tracker results accross all video frames
         """
@@ -90,13 +90,24 @@ class TrackingRunner:
                 prediction = tracker.results[frame_index]
                 frame_rgb = prediction.draw(frame_rgb, **tracker.draw_kwargs())
 
-            out.write(cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))
+            output_frame, data_analytics = mini_court.draw_minicourt_with_projections_test(
+                frame_rgb,
+                fixed_keypoints_detection=fixed_keypoints_detection,
+                players_detection=self.trackers["players_tracker"].results[frame_index],
+                ball_detection=self.trackers["ball_tracker"].results[frame_index],
+                data_analytics=DataAnalytics(),
+            )
+
+            if data_analytics is not None:
+                data_analytics.step(1)
+
+            out.write(cv2.cvtColor(output_frame, cv2.COLOR_RGB2BGR))
         
         out.release()
 
         print("Done.")
 
-    def run(self) -> None:
+    def run(self, mini_court: MiniCourt, fixed_keypoints_detection) -> None:
         """
         Run trackers object prediction for every frame in the frame generator
 
@@ -149,7 +160,7 @@ class TrackingRunner:
 
             tracker.save_predictions()
         
-        self.draw()
+        self.draw(mini_court, fixed_keypoints_detection)
 
         
 
