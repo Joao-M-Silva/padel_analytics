@@ -13,7 +13,6 @@ from trackers import (
     PlayerKeypointsTracker,
     TrackingRunner,
 )
-from analytics import MiniCourt, DataAnalytics
 from config import *
 
 
@@ -37,6 +36,7 @@ PADEL COURT KEYPOINTS
         k3-----------k4---------k5
         |                       |
         k1----------------------k2
+        
 """
 
 def click_event(event, x, y, flags, params): 
@@ -118,6 +118,7 @@ if __name__ == "__main__":
         frame_resolution_wh=video_info.resolution_wh,
     )
 
+
     # FILTER FRAMES OF INTEREST (TODO)
 
 
@@ -170,14 +171,16 @@ if __name__ == "__main__":
         inference_path=OUTPUT_VIDEO_PATH,
         start=0,
         end=MAX_FRAMES,
+        collect_data=COLLECT_DATA,
     )
 
     # OPTIMIZE MINI COURT INTEGRATION
 
-    mini_court = MiniCourt(img)
-
-    runner.run(mini_court=mini_court, fixed_keypoints_detection=fixed_keypoints_detection)
+    runner.run()
 
     t2 = timeit.default_timer()
+
+    with open("data_analytics.json", "w") as f:
+        json.dump(runner.data_analytics.into_dict(), f)
 
     print("Duration (min): ", (t2 - t1) / 60)

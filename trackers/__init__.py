@@ -1,4 +1,4 @@
-from .players_tracker.players_tracker import Player, PlayerTracker
+from .players_tracker.players_tracker import Player, Players, PlayerTracker
 from .ball_tracker.ball_tracker import Ball, BallTracker
 from .ball_tracker.iterable import BallTrajectoryIterable
 from .keypoints_tracker.keypoints_tracker import Keypoint, Keypoints, KeypointsTracker

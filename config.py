@@ -41,3 +41,6 @@ KEYPOINTS_TRACKER_BATCH_SIZE = 8
 KEYPOINTS_TRACKER_MODEL_TYPE = "yolo"
 KEYPOINTS_TRACKER_LOAD_PATH = None
 KEYPOINTS_TRACKER_SAVE_PATH = "./cache/keypoints_detections.json"
+
+# True to collect 2d projection data
+COLLECT_DATA = True

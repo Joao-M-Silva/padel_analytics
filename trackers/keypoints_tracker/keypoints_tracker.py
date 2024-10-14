@@ -79,7 +79,7 @@ class Keypoints(Object):
     def __init__(self, keypoints: list[Keypoint]):
         super().__init__()
 
-        self.keypoints = keypoints
+        self.keypoints = sorted(keypoints, key=lambda x: x.id)
         self.keypoints_by_id = {
             keypoint.id: keypoint
             for keypoint in keypoints
