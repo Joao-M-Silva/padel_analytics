@@ -6,6 +6,7 @@ __pycache__
 *.json
 *.ipynb
 *.pt
+*.csv
 TrackNet/
 dataset/
 runs/

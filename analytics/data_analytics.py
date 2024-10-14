@@ -169,6 +169,10 @@ class DataAnalytics:
             for k, v in data.items():
                 if len(v) < number_frames:
                     data[k].append(None)
+
+        print("data_analytics: missing values")
+        for k, v in data.items():
+            print(f"data_analytics: {k} - {len([v for x in v if x is None])}/{len(v)}")
   
         return data
 
@@ -252,10 +256,16 @@ class DataAnalytics:
                         eval_string_velocity,
                     )
 
+                    # Velocity difference in x and y for each of the players 
+                    # for a given time interval
+                    df[
+                        f"player{player_id}_deltaV{pos}{frame_interval}"
+                    ] = df[f"player{player_id}_V{pos}{frame_interval}"].diff(frame_interval)
+
                     # Acceleration in x and y for each of the players
                     # for a given time interval
                     eval_string_acceleration = f"""
-                    player{player_id}_V{pos}{frame_interval} / delta_time{frame_interval}
+                    player{player_id}_deltaV{pos}{frame_interval} / delta_time{frame_interval}
                     """
                     df[f"player{player_id}_A{pos}{frame_interval}"] = df.eval(
                         eval_string_acceleration,

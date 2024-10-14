@@ -174,13 +174,12 @@ if __name__ == "__main__":
         collect_data=COLLECT_DATA,
     )
 
-    # OPTIMIZE MINI COURT INTEGRATION
-
     runner.run()
 
-    t2 = timeit.default_timer()
+    if COLLECT_DATA:
+        data = runner.data_analytics.into_dataframe(runner.video_info.fps)
+        data.to_csv(COLLECT_DATA_PATH)
 
-    with open("data_analytics.json", "w") as f:
-        json.dump(runner.data_analytics.into_dict(), f)
+    t2 = timeit.default_timer()
 
     print("Duration (min): ", (t2 - t1) / 60)

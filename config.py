@@ -6,6 +6,11 @@ INPUT_VIDEO_PATH = "./videos/trimmed_padel.mp4"
 # Inference video path
 OUTPUT_VIDEO_PATH = "test_dev.mp4"
 
+# True to collect 2d projection data
+COLLECT_DATA = True
+# Collected data path
+COLLECT_DATA_PATH = "data.csv"
+
 # Maximum number of frames to be analysed
 MAX_FRAMES = 300
 
@@ -42,5 +47,3 @@ KEYPOINTS_TRACKER_MODEL_TYPE = "yolo"
 KEYPOINTS_TRACKER_LOAD_PATH = None
 KEYPOINTS_TRACKER_SAVE_PATH = "./cache/keypoints_detections.json"
 
-# True to collect 2d projection data
-COLLECT_DATA = True
