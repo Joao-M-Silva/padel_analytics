@@ -37,7 +37,8 @@ At the root of this repo edit the file config.py and run:
 python main.py
 ````
 
-![test_all_detections_validonline-video-cutter com-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/77c40885-b38e-42f8-b9dc-08ea35ea5113)
+![inference](https://github.com/user-attachments/assets/5a7432ff-35a6-4db4-acc2-cdb760b4bd8d)
+
 
 
 
