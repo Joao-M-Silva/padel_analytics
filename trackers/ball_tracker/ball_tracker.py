@@ -145,7 +145,7 @@ class Ball(Object):
         frame: frame associated with the given ball detection
         xy: ball position coordinates
         visibility: 1 if the ball is visible in the given frame
-        projection: ball position mini court projection 
+        projection: ball position 2d court projection 
     """
 
     def __init__(

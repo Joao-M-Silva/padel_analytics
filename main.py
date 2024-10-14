@@ -1,26 +1,43 @@
-from pathlib import Path
 import timeit
 import json
 import cv2
 import numpy as np
 import supervision as sv
 
-from utils import (
-    read_video, 
-    save_video,
-)
 from trackers import (
     PlayerTracker, 
     BallTracker, 
     KeypointsTracker, 
     Keypoint,
-    PlayersPoseTracker,
+    Keypoints,
+    PlayerKeypointsTracker,
+    TrackingRunner,
 )
-from analytics import MiniCourt, DataAnalytics
+from config import *
 
 
 SELECTED_KEYPOINTS = []
 
+"""
+PADEL COURT KEYPOINTS 
+
+-> To be selected using the image pop-up
+
+        k11--------------------k12
+        |                       |
+        k8-----------k9--------k10
+        |            |          |
+        |            |          |
+        |            |          |
+        k6----------------------k7
+        |            |          |
+        |            |          |
+        |            |          |
+        k3-----------k4---------k5
+        |                       |
+        k1----------------------k2
+        
+"""
 
 def click_event(event, x, y, flags, params): 
   
@@ -37,25 +54,7 @@ def click_event(event, x, y, flags, params):
         cv2.putText(img, str(x) + ',' +
                     str(y), (x,y), font, 
                     1, (255, 0, 0), 2) 
-        cv2.imshow('image', img) 
-
-
-CACHE_SAVE_PATH = Path("cache/")
-PLAYERS_DETECTIONS_LOAD_PATH = None # "cache/player_detections.json"
-BALL_DETECTIONS_LOAD_PATH = None # "cache/ball_detections.json"
-KEYPOINTS_DETECTIONS_LOAD_PATH = None # "cache/keypoints_detections.json"
-PLAYERS_KEYPOINTS_DETECTIONS_LOAD_PATH = None
-
-INPUT_VIDEO_PATH = "./videos/trimmed_padel.mp4"
-# INPUT_VIDEO_PATH = "./videos/trimmed_esposende_padel.mp4"
-PLAYERS_TRACKER_MODEL = "yolov8m.pt"
-BALL_TRACKER_MODEL = "./weights/ball_detection/TrackNet_best.pt"
-BALL_TRACKER_INPAINT_MODEL = "./weights/ball_detection/InpaintNet_best.pt"
-KEYPOINTS_TRACKER_MODEL = "./runs/keypoints/train2/weights/best.pt"
-PLAYERS_KEYPOINTS_TRACKER_MODEL = "./runs/pose/train3/weights/best.pt"
-OUTPUT_VIDEO_PATH = "test_all_detections.mp4"
-
-CROP_SIZE = 300
+        cv2.imshow('frame', img) 
 
 
 if __name__ == "__main__":
@@ -70,24 +69,39 @@ if __name__ == "__main__":
         video_info.total_frames,
     )
 
-    ##### frames, fps, w, h = read_video(INPUT_VIDEO_PATH, max_frames=300)
-    
     first_frame_generator = sv.get_video_frames_generator(
         INPUT_VIDEO_PATH,
         start=0,
         stride=1,
         end=1,
     )
-    img = next(first_frame_generator)
-    cv2.imshow('image', img)
- 
-    cv2.setMouseCallback('image', click_event) 
 
-    # wait for a key to be pressed to exit 
-    cv2.waitKey(0) 
-  
-    # close the window 
-    cv2.destroyAllWindows() 
+    img = next(first_frame_generator)
+
+    if FIXED_COURT_KEYPOINTS_LOAD_PATH is not None:
+        with open(FIXED_COURT_KEYPOINTS_LOAD_PATH, "r") as f:
+            SELECTED_KEYPOINTS = json.load(f)
+    else:
+        cv2.imshow('frame', img)
+        cv2.setMouseCallback('frame', click_event) 
+        # wait for a key to be pressed to exit 
+        cv2.waitKey(0) 
+        # close the window 
+        cv2.destroyAllWindows() 
+
+    if FIXED_COURT_KEYPOINTS_SAVE_PATH is not None:
+        with open(FIXED_COURT_KEYPOINTS_SAVE_PATH, "w") as f:
+            json.dump(SELECTED_KEYPOINTS, f)
+
+    fixed_keypoints_detection = Keypoints(
+        [
+            Keypoint(
+                id=i,
+                xy=tuple(float(x) for x in v)
+            )
+            for i, v in enumerate(SELECTED_KEYPOINTS)
+        ]
+    )
 
     keypoints_array = np.array(SELECTED_KEYPOINTS)
     # Polygon to filter person detections inside padel court
@@ -104,181 +118,67 @@ if __name__ == "__main__":
         frame_resolution_wh=video_info.resolution_wh,
     )
 
-    fixed_keypoints_detection = [
-        Keypoint(
-            id=i,
-            xy=tuple(float(x) for x in v)
-        )
-        for i, v in enumerate(SELECTED_KEYPOINTS)
-    ]
 
-    if CACHE_SAVE_PATH is not None:
-        fixed_keypoints_detection_path = CACHE_SAVE_PATH / "fixed_keypoints_detection.json"
-        with open(fixed_keypoints_detection_path, "w") as f:
-            json.dump(SELECTED_KEYPOINTS, f)
+    # FILTER FRAMES OF INTEREST (TODO)
 
-    # FILTER FRAMES OF INTEREST
 
-    # Track players
-    player_tracker = PlayerTracker(
-        PLAYERS_TRACKER_MODEL, 
-        video_info,
+    # Instantiate trackers
+    players_tracker = PlayerTracker(
+        PLAYERS_TRACKER_MODEL,
         polygon_zone,
-    )
-    if CACHE_SAVE_PATH is not None:
-        player_detections_save_path = CACHE_SAVE_PATH / "player_detections.json"
-    else:
-        player_detections_save_path = None
-
-    """SUBOPTIMAL"""
-    frame_generator = sv.get_video_frames_generator(
-        INPUT_VIDEO_PATH,
-        start=0,
-        stride=1,
-        end=CROP_SIZE,
+        batch_size=PLAYERS_TRACKER_BATCH_SIZE,
+        annotator=PLAYERS_TRACKER_ANNOTATOR,
+        show_confidence=True,
+        load_path=PLAYERS_TRACKER_LOAD_PATH,
+        save_path=PLAYERS_TRACKER_SAVE_PATH,
     )
 
-    player_detections = player_tracker.detect_frames(
-        frame_generator, 
-        save_path=player_detections_save_path,
-        load_path=PLAYERS_DETECTIONS_LOAD_PATH,
-    )
-
-    # Track players keypoints
-    players_pose_tracker = PlayersPoseTracker(
+    player_keypoints_tracker = PlayerKeypointsTracker(
         PLAYERS_KEYPOINTS_TRACKER_MODEL,
-        train_image_size=1280,
+        train_image_size=PLAYERS_KEYPOINTS_TRACKER_TRAIN_IMAGE_SIZE,
+        batch_size=PLAYERS_KEYPOINTS_TRACKER_BATCH_SIZE,
+        load_path=PLAYERS_KEYPOINTS_TRACKER_LOAD_PATH,
+        save_path=PLAYERS_KEYPOINTS_TRACKER_SAVE_PATH,
     )
-    if CACHE_SAVE_PATH is not None:
-        players_keypoints_detections_save_path = CACHE_SAVE_PATH / "players_keypoints_detections.json"
-    else:
-        players_keypoints_detections_save_path = None
-
-    """SUBOPTIMAL"""
-    frame_generator = sv.get_video_frames_generator(
-        INPUT_VIDEO_PATH,
-        start=0,
-        stride=1,
-        end=CROP_SIZE,
-    )
-
-    players_keypoints_detections = players_pose_tracker.detect_frames(
-        frame_generator,
-        save_path=players_keypoints_detections_save_path,
-        load_path=PLAYERS_KEYPOINTS_DETECTIONS_LOAD_PATH,
+  
+    ball_tracker = BallTracker(
+        BALL_TRACKER_MODEL,
+        BALL_TRACKER_INPAINT_MODEL,
+        batch_size=BALL_TRACKER_BATCH_SIZE,
+        median_max_sample_num=BALL_TRACKER_MEDIAN_MAX_SAMPLE_NUM,
+        median=None,
+        load_path=BALL_TRACKER_LOAD_PATH,
+        save_path=BALL_TRACKER_SAVE_PATH,
     )
 
-    # TRACK THE BALL (use TrackNetV3)
-    ball_tracker = BallTracker(BALL_TRACKER_MODEL, BALL_TRACKER_INPAINT_MODEL)
-    if CACHE_SAVE_PATH is not None:
-        ball_detections_save_path = CACHE_SAVE_PATH / "ball_detections.json"
-    else:
-        ball_detections_save_path = None
-
-    """SUBOPTIMAL"""
-    frame_generator = sv.get_video_frames_generator(
-        INPUT_VIDEO_PATH,
-        start=0,
-        stride=1,
-        end=CROP_SIZE,
-    )
-
-    ball_detections = ball_tracker.detect_frames(
-        frames=frame_generator, 
-        total_frames=CROP_SIZE,
-        width=w,
-        height=h,
-        batch_size=8,
-        save_path=ball_detections_save_path,
-        load_path=BALL_DETECTIONS_LOAD_PATH,
-    )
-
-    # DETECT KEYPOINTS
     keypoints_tracker = KeypointsTracker(
         model_path=KEYPOINTS_TRACKER_MODEL,
-        model_type="yolo",
+        batch_size=KEYPOINTS_TRACKER_BATCH_SIZE,
+        model_type=KEYPOINTS_TRACKER_MODEL_TYPE,
         fixed_keypoints_detection=fixed_keypoints_detection,
+        load_path=KEYPOINTS_TRACKER_LOAD_PATH,
+        save_path=KEYPOINTS_TRACKER_SAVE_PATH,
     )
-    if CACHE_SAVE_PATH is not None:
-        keypoints_detections_save_path = CACHE_SAVE_PATH / "keypoints_detections.json"
-    else:
-        keypoints_detections_save_path = None
 
-    """SUBOPTIMAL"""
-    frame_generator = sv.get_video_frames_generator(
-        INPUT_VIDEO_PATH,
+    runner = TrackingRunner(
+        trackers=[
+            players_tracker, 
+            player_keypoints_tracker, 
+            ball_tracker,
+            keypoints_tracker,    
+        ],
+        video_path=INPUT_VIDEO_PATH,
+        inference_path=OUTPUT_VIDEO_PATH,
         start=0,
-        stride=1,
-        end=CROP_SIZE,
+        end=MAX_FRAMES,
+        collect_data=COLLECT_DATA,
     )
 
-    # MIGH ONLY DETECT IN WIDE STEPS (OR EVEN ON A SINGLE FRAME DUE TO FIXED CAMERA)
-    keypoints_detections = keypoints_tracker.detect_frames(
-        frame_generator,
-        save_path=keypoints_detections_save_path,
-        load_path=KEYPOINTS_DETECTIONS_LOAD_PATH,
-        frequency=1,
-        use_extra_model=False,
-    )
+    runner.run()
 
-    """SUBOPTIMAL"""
-    frame_generator = sv.get_video_frames_generator(
-        INPUT_VIDEO_PATH,
-        start=0,
-        stride=1,
-        end=CROP_SIZE,
-    )
-    
-    # Draw players detections
-    output_frames = player_tracker.draw_multiple_frames(
-        frame_generator,
-        player_detections,
-    )
-
-    output_frames = players_pose_tracker.draw_multiple_frames(
-        output_frames,
-        players_keypoints_detections,
-    )
-
-    # Draw ball detections
-    output_frames = ball_tracker.draw_multiple_frames(
-        output_frames,
-        ball_detections=ball_detections,
-        traj_len=8,
-    )
-
-    # Draw keypoints detections
-    output_frames = keypoints_tracker.draw_multiple_frames(
-        output_frames, 
-        keypoints_detections,
-    )
-
-    # 2D PROJECTION
-    mini_court = MiniCourt(img)
-    output_frames, data_analytics = mini_court.draw_minicourt_with_projections(
-        output_frames,
-        keypoints_detections,
-        player_detections,
-        ball_detections,
-        data_analytics=DataAnalytics(),
-    )
-
-    for i, frame in enumerate(output_frames):
-        cv2.putText(
-            frame,
-            f"Frame: {i}",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (0, 255, 0),
-            2,
-        )
-
-    save_video(
-        output_frames,
-        OUTPUT_VIDEO_PATH,
-        fps=fps,
-    )
+    if COLLECT_DATA:
+        data = runner.data_analytics.into_dataframe(runner.video_info.fps)
+        data.to_csv(COLLECT_DATA_PATH)
 
     t2 = timeit.default_timer()
 

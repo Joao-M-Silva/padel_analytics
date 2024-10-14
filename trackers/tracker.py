@@ -314,7 +314,7 @@ class Tracker(ABC):
         
         try:
             predictions = self.predict_frames(frame_generator, **kwargs)
-            self.results = predictions
+            self.results.predictions = predictions
         except NoPredictFrames:
             for sample in tqdm(
                 sampler(

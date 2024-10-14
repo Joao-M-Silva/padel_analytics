@@ -207,7 +207,7 @@ class Players(Object):
         self.players = players
 
     @classmethod
-    def from_json(cls, x: dict | list[dict]) -> "Players":
+    def from_json(cls, x: list[dict]) -> "Players":
         return cls(
             players=[
                 Player.from_json(player_json)
