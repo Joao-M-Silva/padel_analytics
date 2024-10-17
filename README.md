@@ -23,19 +23,23 @@ The goal of this project is to provide precise and robust analytics using only a
 #### 1. Clone this repository.
 #### 2. Setup virtual environment.
 ```
-conda create -n python=3.12 <yourenv> pip
-conda activate <yourenv>
+conda create -n python=3.12 padel_analytics pip
+conda activate padel_analytics
 pip install -r requirements.txt
 ```
 #### 3. Install pytorch <https://pytorch.org/get-started/locally/>.
 #### 4. Download weights.
-   In order to have access to the models' weights, please email me at <jsilvawasd@hotmail.com> describing your motivation and goals regarding this project. I am currenly trying to evolve to a point where this project is monetizable, as so,    the access to the models' weights is limited to possible collaborations. I encourage you to train your own models and get this framework to the next level!
+   Download the weights available here https://drive.google.com/drive/folders/1joO7w1Am7B418SIqGBq90YipQl81FMzh?usp=drive_link. COnfigure the config.py file with your own model checkpoints paths. I encourage you to train your own models and get this framework to the next level!
 
 # Inference
-At the root of this repo edit the file config.py and run:
+At the root of this repo, edit the file config.py accordingly and run:
 ````
 python main.py
 ````
+Note: this file assumes a fixed camera setup. As a result, a UI for selecting court keypoints will pop up asking you to select 12 unique court keypoints that are further used for homographic computations. Please refer to main.py lines 24-38.
+
+# Collaborations
+I am currently looking for collaborations to uplift this project to new heights. If you are interested feel free to e-mail me jsilvawasd@hotmail.com
 
 ![inference](https://github.com/user-attachments/assets/5a7432ff-35a6-4db4-acc2-cdb760b4bd8d)
 
