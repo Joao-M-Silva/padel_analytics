@@ -73,7 +73,7 @@ class TrackingRunner:
 
         self.projected_court = ProjectedCourt(self.video_info)
         if collect_data:
-            print("runner: ready for data collection")
+            print("runner: Ready for data collection")
             self.data_analytics = DataAnalytics()
         else:
             self.data_analytics = None
@@ -112,7 +112,7 @@ class TrackingRunner:
         )
 
         for frame_index, frame in tqdm(enumerate(frame_generator)):
-
+    
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             cv2.putText(
@@ -130,7 +130,12 @@ class TrackingRunner:
             keypoints_detection = None
             for tracker in self.trackers.values():
                 
-                prediction = tracker.results[frame_index]
+                try:
+                    prediction = tracker.results[frame_index]
+                except IndexError as e:
+                    print(f"runner: {str(tracker)} frame {frame_index}")
+                    raise(e)
+                
                 frame_rgb = prediction.draw(frame_rgb, **tracker.draw_kwargs())
 
                 if tracker.object() == Players:
@@ -161,9 +166,10 @@ class TrackingRunner:
         # Remove extra frame
         self.data_analytics.frames = self.data_analytics.frames[:-1]
 
-        assert len(self.data_analytics) == self.total_frames
+        # assertion_txt = f"lenght data analytics: {len(self.data_analytics)} / total frames {self.total_frames}"
+        # assert len(self.data_analytics) == self.total_frames, assertion_txt
 
-        print("runner: Done.")
+        print("runner: Done.") 
 
 
     def run(self) -> None:

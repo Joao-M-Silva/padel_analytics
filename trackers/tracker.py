@@ -324,8 +324,10 @@ class Tracker(ABC):
             ):
                 predictions = self.predict_sample(sample, **kwargs)
                 self.results.update(predictions)
+
+        print(f"{self.__str__()}: {len(self.results)} predictions.")
             
-        return predictions
+        return self.results
 
 
 
