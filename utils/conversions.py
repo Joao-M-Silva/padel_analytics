@@ -1,3 +1,5 @@
+""" Functions for pixels distance conversions """
+
 def convert_pixel_distance_to_meters(
     pixel_distance: float,
     reference_in_meters: int,

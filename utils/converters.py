@@ -1,3 +1,5 @@
+""" Functions to convert between image datatypes """
+
 import numpy as np
 from PIL import Image
 import base64

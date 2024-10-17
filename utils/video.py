@@ -1,3 +1,5 @@
+""" Functions to read and save videos """
+
 from typing import Literal
 import cv2
 import numpy as np
