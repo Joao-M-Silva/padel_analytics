@@ -36,7 +36,7 @@ At the root of this repo, edit the file config.py accordingly and run:
 ````
 python main.py
 ````
-Note: this file assumes a fixed camera setup. As a result, a UI for selecting court keypoints will pop up asking you to select 12 unique court keypoints that are further used for homographic computations. Please refer to main.py lines 24-38.
+Note: currently this implementation assumes a fixed camera setup. As a result, a UI for selecting court keypoints will pop up asking you to select 12 unique court keypoints that are further used for homographic computations. Please refer to main.py lines 24-38.
 
 # Collaborations
 I am currently looking for collaborations to uplift this project to new heights. If you are interested feel free to e-mail me jsilvawasd@hotmail.com
