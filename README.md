@@ -29,8 +29,7 @@ pip install -r requirements.txt
 ```
 #### 3. Install pytorch <https://pytorch.org/get-started/locally/>.
 #### 4. Download weights.
-   The current model weights used are available here https://drive.google.com/drive/folders/1joO7w1Am7B418SIqGBq90YipQl81FMzh?usp=drive_link. Configure the config.py file with your own model checkpoints paths. I encourage you to train your own models and get this framework to the next level!
-
+   The current model weights used are available here https://drive.google.com/drive/folders/1joO7w1Am7B418SIqGBq90YipQl81FMzh?usp=drive_link. Configure the config.py file with your own model checkpoints paths. 
 # Inference
 At the root of this repo, edit the file config.py accordingly and run:
 ````
