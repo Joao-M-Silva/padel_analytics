@@ -38,7 +38,7 @@ python main.py
 ````
 Note: currently this implementation assumes a fixed camera setup. As a result, a UI for selecting court keypoints will pop up asking you to select 12 unique court keypoints that are further used for homographic computations. Please refer to main.py lines 24-38.
 #### VRAM requirements:
-Using the default batch sizes one will need to have at least 8GB of VRAM. Reduce batch sizes accordingly editing the config.py file if needed due to memory constraints. 
+Using the default batch sizes one will need to have at least 8GB of VRAM. Reduce batch sizes editing the config.py file accordingly to your needs. 
 
 ![inference](https://github.com/user-attachments/assets/5a7432ff-35a6-4db4-acc2-cdb760b4bd8d)
 
