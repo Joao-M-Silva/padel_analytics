@@ -37,6 +37,9 @@ At the root of this repo, edit the file config.py accordingly and run:
 python main.py
 ````
 Note: currently this implementation assumes a fixed camera setup. As a result, a UI for selecting court keypoints will pop up asking you to select 12 unique court keypoints that are further used for homographic computations. Please refer to main.py lines 24-38.
+
+![select_keypoints_animation](https://github.com/user-attachments/assets/3c15131f-9943-477b-adeb-782cc32e8946)
+
 #### VRAM requirements:
 Using the default batch sizes one will need to have at least 8GB of VRAM. Reduce batch sizes editing the config.py file according to your needs. 
 
