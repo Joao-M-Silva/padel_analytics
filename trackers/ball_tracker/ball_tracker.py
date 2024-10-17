@@ -675,15 +675,36 @@ class BallTracker(Tracker):
         pred_dict = inpaint_pred_dict if self.inpaintnet is not None else tracknet_pred_dict
         
         ball_detections = []
-        for i, frame_index in enumerate(pred_dict["Frame"]):
-            ball_detections.append(
-                Ball(
-                    frame=frame_index,
-                    xy=(pred_dict["X"][i], pred_dict["Y"][i]),
-                    visibility=pred_dict["Visibility"][i]
+        for frame_counter in range(video_len):
+            if frame_counter in pred_dict["Frame"]:
+                i = pred_dict["Frame"].index(frame_counter)
+                ball_detections.append(
+                    Ball(
+                        frame=frame_counter,
+                        xy=(pred_dict["X"][i], pred_dict["Y"][i]),
+                        visibility=pred_dict["Visibility"][i]
+                    )
                 )
-            )
-        
+            else:
+                print(f"{self.__str__()}: missing detection frame {frame_counter}")
+                ball_detections.append(
+                    Ball(
+                        frame=frame_counter,
+                        xy=(0.0, 0.0),
+                        visibility=0,
+                    )
+                )
+
+        # for i, frame_index in enumerate(pred_dict["Frame"]):
+        #     if frame_counter == frame_index:
+        #         ball_detections.append(
+        #             Ball(
+        #                 frame=frame_index,
+        #                 xy=(pred_dict["X"][i], pred_dict["Y"][i]),
+        #                 visibility=pred_dict["Visibility"][i]
+        #             )
+        #         )
+            
         return ball_detections
 
         
