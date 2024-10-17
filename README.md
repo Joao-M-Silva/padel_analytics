@@ -46,7 +46,7 @@ Currently this implementation assumes a fixed camera setup. As a result, a UI fo
 ![inference](https://github.com/user-attachments/assets/5a7432ff-35a6-4db4-acc2-cdb760b4bd8d)
 
 # Collaborations
-I am currently looking for collaborations to uplift this project to new heights. If you are interested feel free to e-mail me jsilvawasd@hotmail.com.
+I am currently looking for collaborations to uplift this project to new heights. If you are interested feel free to e-mail me at jsilvawasd@hotmail.com.
 
 
 
