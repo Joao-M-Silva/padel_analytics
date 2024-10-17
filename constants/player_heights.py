@@ -1,3 +1,5 @@
+""" Several professional players heights in meters """
+
 JUAN_LEBRON = 1.85
 ALE_GALAN = 1.86
 MARTIN_DINENNO = 1.75
