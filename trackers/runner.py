@@ -186,21 +186,28 @@ class TrackingRunner:
 
             if len(tracker) != 0:
                 print(f"{tracker.__str__()}: {len(tracker)} predictions stored")
-                if len(tracker) == self.total_frames:
-                    print(
-                        f"""{tracker.__str__()}: \
-                        match between number of predictions and total frames 
-                        """
-                    )
-                    continue
-                else:
-                    print(
-                        f"""{tracker.__str__()}: \
-                        unmatch between number of predictions and total frames 
-                        """
-                    )
-                    tracker.restart()
-                    print(f"{tracker.__str__()}: WARNING restarted tracker")
+                
+
+                continue
+
+                """ FIX TOTAL FRAMES / TOTAL PREDICTIONS MISMATCH """
+
+
+                #if len(tracker) == self.total_frames:
+                #    print(
+                #        f"""{tracker.__str__()}: \
+                #        match between number of predictions and total frames 
+                #        """
+                #    )
+                #    continue
+                #else:
+                #    print(
+                #        f"""{tracker.__str__()}: \
+                #        unmatch between number of predictions and total frames 
+                #        """
+                #   )
+                #    tracker.restart()
+                #    print(f"{tracker.__str__()}: WARNING restarted tracker")
 
             tracker.to(tracker.DEVICE)
             print(f"{str(tracker)}: Running on {tracker.DEVICE} ...")

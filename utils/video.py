@@ -49,10 +49,11 @@ def read_video(
 def save_video(
     frames: list[np.ndarray],
     path: str | Path,
-    fps: int = 30,
+    fps: int,
+    h: int,
+    w: int,
 ):
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    h, w = frames[0].shape[:2]
     out = cv2.VideoWriter(path, fourcc, float(fps), (w, h))
     for frame in frames:
         frame_bgr = cv2.cvtColor(
