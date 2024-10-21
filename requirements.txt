@@ -1,4 +1,4 @@
-av
+kaleav
 ffmpeg
 matplotlib
 opencv-python
@@ -7,4 +7,5 @@ plotly
 seaborn 
 supervision
 ultralytics
-
+streamlit
+parse
