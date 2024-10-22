@@ -250,7 +250,7 @@ class BallTracker(Tracker):
         self.DELTA_T: float = 1 / math.sqrt(self.HEIGHT**2 + self.WIDTH**2)
         self.COOR_TH = self.DELTA_T * 50
 
-        tracknet_ckpt = torch.load(tracking_model_path)
+        tracknet_ckpt = torch.load(tracking_model_path, map_location=torch.device('cpu'))
         self.tracknet_seq_len = tracknet_ckpt['param_dict']['seq_len']
 
         assert self.tracknet_seq_len == self.TRAJECTORY_LENGTH
@@ -266,7 +266,7 @@ class BallTracker(Tracker):
         self.tracknet.eval()
 
         if inpainting_model_path:
-            inpaintnet_ckpt = torch.load(inpainting_model_path)
+            inpaintnet_ckpt = torch.load(inpainting_model_path, map_location=torch.device('cpu'))
             self.inpaintnet_seq_len = inpaintnet_ckpt['param_dict']['seq_len']
             self.inpaintnet = get_model('InpaintNet')
             self.inpaintnet.load_state_dict(inpaintnet_ckpt['model'])
@@ -570,8 +570,8 @@ class BallTracker(Tracker):
                 batch_size = i.shape[0]
                 with torch.no_grad():
                     coor_inpaint = self.inpaintnet(
-                        coor_pred.cuda(), 
-                        inpaint_mask.cuda(),
+                        coor_pred.to('mps'),
+                        inpaint_mask.to('mps'),
                     ).detach().cpu()
                     
                     coor_inpaint = coor_inpaint * inpaint_mask + coor_pred * (1-inpaint_mask)

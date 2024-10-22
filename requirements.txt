@@ -1,11 +1,11 @@
-kaleav
+# kaleav
 ffmpeg
 matplotlib
 opencv-python
 pims
 plotly
 seaborn 
-supervision
+supervision<0.24.0
 ultralytics
 streamlit
 parse
