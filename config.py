@@ -12,7 +12,7 @@ COLLECT_DATA = True
 COLLECT_DATA_PATH = "data.csv"
 
 # Maximum number of frames to be analysed
-MAX_FRAMES = 30
+MAX_FRAMES = None
 
 # Fixed court keypoints´
 FIXED_COURT_KEYPOINTS_LOAD_PATH = "./cache/fixed_keypoints_detection.json"
