@@ -9,3 +9,5 @@ supervision<0.24.0
 ultralytics
 streamlit
 parse
+pytest
+scipy
