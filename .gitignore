@@ -1,3 +1,5 @@
+.idea/
+.python-version
 __pycache__
 *.mp4
 *.avi
