@@ -10,7 +10,7 @@ from trackers.keypoints_tracker.keypoints_tracker import Keypoints
 
 
 class KalmanTracker:
-    def __init__(self, keypoints: Keypoints, court_width=10., court_length=20.):
+    def __init__(self, keypoints: Keypoints, court_width=10., court_length=20., court_height=4.):
         """
         Initialize the Kalman tracker with the court keypoints and dimensions.
         :param keypoints: Keypoints object with the court keypoints
@@ -20,34 +20,22 @@ class KalmanTracker:
         self.keypoints = keypoints
         self.court_width = court_width
         self.court_length = court_length
-        self.depth_vanishing_point = self._determine_vanishing_point()
+        self.court_height = court_height
+        self.depth_vanishing_point = self._determine_vanishing_point(indexes=[[0, 2, 5, 7, 10], [1, 4, 6, 9, 11]])
+        self.height_vanishing_point = self._determine_vanishing_point(indexes=[[0, 12], [1, 13]])
         self.projection_matrix = self._determine_projection_matrix()
 
         self.xy = None
 
-    def _determine_vanishing_point(self):
-        keypoints = self.keypoints
-        left_side_kp = [
-            keypoints.keypoints_by_id[0].xy,
-            keypoints.keypoints_by_id[2].xy,
-            keypoints.keypoints_by_id[5].xy,
-            keypoints.keypoints_by_id[7].xy,
-            keypoints.keypoints_by_id[10].xy
-        ]
-
-        right_side_kp = [
-            keypoints.keypoints_by_id[1].xy,
-            keypoints.keypoints_by_id[4].xy,
-            keypoints.keypoints_by_id[6].xy,
-            keypoints.keypoints_by_id[9].xy,
-            keypoints.keypoints_by_id[11].xy
-        ]
+    def _determine_vanishing_point(self, indexes):
+        line1_keypoints = [self.keypoints.keypoints_by_id[i].xy for i in indexes[0]]
+        line2_keypoints = [self.keypoints.keypoints_by_id[i].xy for i in indexes[1]]
 
         # Compute the regression line of the left side of the court
-        slope1, intercept1 = compute_regression_line(points=left_side_kp)
+        slope1, intercept1 = compute_regression_line(points=line1_keypoints)
 
         # Compute the regression line of the right side of the court
-        slope2, intercept2 = compute_regression_line(points=right_side_kp)
+        slope2, intercept2 = compute_regression_line(points=line2_keypoints)
 
         # Find the intersection of the two lines
         intersection = find_intersection(
@@ -57,30 +45,28 @@ class KalmanTracker:
         return intersection
 
     def _determine_projection_matrix(self):
-        # World coordinates of the corner points
-        world_points = np.array([
-            [0, 0, 0],  # k1
-            [0, self.court_width, 0],  # k2
-            [self.court_length/2, 0, 0],  # k6
-            [self.court_length/2, self.court_width, 0],  # k7
-            [self.court_length, 0, 0],  # k11
-            [self.court_length, self.court_width, 0]  # k12
-        ])
+        # This determines the correspondence between keypoints and their expected world coordinates
+        keypoint_correspondence = {
+            0: [0, 0, 0],  # k1
+            1: [0, self.court_width, 0],  # k2
+            5: [self.court_length / 2, 0, 0],  # k6
+            6: [self.court_length / 2, self.court_width, 0],  # k7
+            10: [self.court_length, 0, 0],  # k11
+            11: [self.court_length, self.court_width, 0],  # k12
+            12: [0, 0, self.court_height],  # k13
+            13: [0, self.court_width, self.court_height],  # k14
+        }
 
-        # Image coordinates of the corner points
+        image_points_idx, world_points = zip(*keypoint_correspondence.items())
+
         image_points = np.array([
-            [self.keypoints.keypoints_by_id[0].xy[0], self.keypoints.keypoints_by_id[0].xy[1]],
-            [self.keypoints.keypoints_by_id[1].xy[0], self.keypoints.keypoints_by_id[1].xy[1]],
-            [self.keypoints.keypoints_by_id[5].xy[0], self.keypoints.keypoints_by_id[5].xy[1]],
-            [self.keypoints.keypoints_by_id[6].xy[0], self.keypoints.keypoints_by_id[6].xy[1]],
-            [self.keypoints.keypoints_by_id[10].xy[0], self.keypoints.keypoints_by_id[10].xy[1]],
-            [self.keypoints.keypoints_by_id[11].xy[0], self.keypoints.keypoints_by_id[11].xy[1]]
+            [self.keypoints.keypoints_by_id[idx].xy[0], self.keypoints.keypoints_by_id[idx].xy[1]]
+            for idx in image_points_idx
         ])
 
         # Vanishing point constraints
-        # (for the moment we only use depth vanishing point)
-        vanishing_points = np.array([self.depth_vanishing_point])
-        vanishing_directions = np.array([[0, 1, 0]])
+        vanishing_points = np.array([self.depth_vanishing_point, self.height_vanishing_point])
+        vanishing_directions = np.array([[0, 1, 0], [0, 0, -1]])
 
         # Estimate the projection matrix
         P = estimate_projection_matrix_with_vanishing_points(
@@ -169,7 +155,7 @@ def estimate_projection_matrix_with_vanishing_points(
     A = np.array(A)
     b = np.array(b)
 
-    assert np.linalg.matrix_rank(A, tol=1e-6) == 11, "Matrix A must have rank 12"
+    assert np.linalg.matrix_rank(A, tol=1e-6) == 12, "Matrix A must have rank 12"
 
     # Solve the system A * p = b using least squares
     P, residuals, rank, sv = np.linalg.lstsq(A, b, rcond=None)
