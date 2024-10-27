@@ -10,6 +10,7 @@ from pathlib import Path
 import cv2
 import supervision as sv
 
+from config import COLLECT_DATA
 from trackers.players_tracker.players_tracker import Players
 from trackers.ball_tracker.ball_tracker import Ball
 from trackers.keypoints_tracker.keypoints_tracker import Keypoints
@@ -164,7 +165,8 @@ class TrackingRunner:
         out.release()
 
         # Remove extra frame
-        self.data_analytics.frames = self.data_analytics.frames[:-1]
+        if COLLECT_DATA:
+            self.data_analytics.frames = self.data_analytics.frames[:-1]
 
         # assertion_txt = f"lenght data analytics: {len(self.data_analytics)} / total frames {self.total_frames}"
         # assert len(self.data_analytics) == self.total_frames, assertion_txt

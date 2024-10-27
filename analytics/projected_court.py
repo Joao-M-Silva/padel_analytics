@@ -107,7 +107,7 @@ class ProjectedCourtKeypoints:
 
     def keypoints(
         self, 
-        number_keypoints: Literal[12, 18, 22],
+        number_keypoints: Literal[12, 14, 18, 22],
     ) -> list[Keypoint]:
         
         keypoints_12 = [
@@ -415,7 +415,26 @@ class ProjectedCourt:
                     keypoint.xy
                     for keypoint in dst_keypoints
                 ]
-            ) 
+            )
+        elif len(keypoints_detection) == 14:
+            src_keypoints = keypoints_detection
+            # Court keypoints of the given frame
+            src_points = np.array(
+                [
+                    keypoint.xy
+                    for keypoint in src_keypoints
+                ]
+            )
+            dst_keypoints = self.court_keypoints.keypoints(
+                number_keypoints=14,
+            )
+            # Projected court keypoints
+            dst_points = np.array(
+                [
+                    keypoint.xy
+                    for keypoint in dst_keypoints
+                ]
+            )
         elif len(keypoints_detection) == 18:
             src_keypoints = keypoints_detection
             # Court keypoints of the given frame
@@ -603,6 +622,8 @@ class ProjectedCourt:
             homography_matrix=homography_matrix,
         )
 
+        ball_detection.xy = ball_detection.xyz[:2]
+
         return projected_ball.draw_projection(frame)
 
     def draw_projections_and_collect_data(
@@ -633,13 +654,15 @@ class ProjectedCourt:
         if self.H is None:
             if keypoints_detection:
                 print("projected_court: First homography matrix calculation ...")
-                self.H = self.homography_matrix(keypoints_detection)
+                # TODO: Account for the case where 14 keypoints are provided
+                self.H = self.homography_matrix(keypoints_detection[:12])
                 print("projected_court: Done.")
         else:
             if not(is_fixed_keypoints):
                 if keypoints_detection:
                     print("projected_court: Homography matrix calculation ...")
-                    self.H = self.homography_matrix(keypoints_detection)
+                    # TODO: Account for the case where 14 keypoints are provided
+                    self.H = self.homography_matrix(keypoints_detection[:12])
                     print("projected_court: Done.")
                 else:
                     # Can't calculate homography for this frame

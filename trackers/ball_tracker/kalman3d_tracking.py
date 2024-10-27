@@ -1,6 +1,7 @@
 import numpy as np
 import plotly.graph_objs as go
 
+from trackers.ball_tracker.court_3d_model import Court3DModel
 from trackers.ball_tracker.ekf import ExtendedKalmanFilter
 
 
@@ -9,7 +10,11 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
     Implements the physics model for tracking a ball in 3D space using an Extended Kalman filter.
     """
 
-    def __init__(self, projection_matrix, g=9.81, width=10., length=20., height=4., q=0.1, r=.01):
+    def __init__(self, court_model: Court3DModel, g=9.81, q=0.1, r=.01):
+        self.court_model = court_model
+        self.width = court_model.width
+        self.length = court_model.length
+        self.height = court_model.height
 
         # Process noise covariance
         # larger for V_y since we expect players hit the ball in this direction
@@ -17,25 +22,13 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
         R = np.eye(2) * r  # Measurement noise covariance
         # Initial state (position and velocity)
         # Assume ball starts in the middle of the court
-        x0 = np.array([width / 2, length / 2, height / 2, 0, 0, 0, 1])
-        P = np.diag([width, length, height, width / 10, width / 10, width / 10, 0])  # Initial state uncertainty
+        x0 = np.array([self.width / 2, self.length / 2, self.height / 2, 0, 0, 0, 1])
+        P = np.diag([self.width, self.length, self.height, self.width / 10, self.width / 10, self.width / 10, 0])  # Initial state uncertainty
         super().__init__(P, Q, R, x0)
-        self.H = projection_matrix
         self.g = g
-        self.width = width
-        self.length = length
-        self.height = height
 
     def observation_function(self, x):
-        # Project the current 3D state to the 2D image space using the projection matrix
-        observation_homogeneous = np.dot(self.H, x[[0, 1, 2, 6]])  # Append 1 for homogeneous coords
-
-        # Normalize homogeneous coordinates (x', y', w) to (x/w, y/w)
-        x_img = observation_homogeneous[0] / observation_homogeneous[2]
-        y_img = observation_homogeneous[1] / observation_homogeneous[2]
-
-        # Construct the predicted 2D measurement from the projected 3D point
-        return np.array([x_img, y_img])
+        return self.court_model.world2image(x[:3])
 
     def transition_function(self, x, dt=1. / 30):
         """
@@ -79,6 +72,14 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
             new_state[4] = -new_state[4]
 
         return new_state
+
+    def dump(self, filename):
+        fig = self.plot()
+        fig.show()
+        # Save to file
+        with open(filename, "w") as f:
+            f.write(fig.to_html())
+
 
     def plot(self, projection_matrix=None):
         if projection_matrix is not None:

@@ -14,7 +14,7 @@ from trackers import (
     TrackingRunner,
 )
 from config import *
-
+from trackers.ball_tracker.court_3d_model import Court3DModel
 
 SELECTED_KEYPOINTS = []
 
@@ -104,6 +104,9 @@ if __name__ == "__main__":
     )
 
     keypoints_array = np.array(SELECTED_KEYPOINTS)
+
+    court_model = Court3DModel(keypoints=fixed_keypoints_detection)
+
     # Polygon to filter person detections inside padel court
     polygon_zone = sv.PolygonZone(
         np.concatenate(
@@ -149,6 +152,7 @@ if __name__ == "__main__":
         median=None,
         load_path=BALL_TRACKER_LOAD_PATH,
         save_path=BALL_TRACKER_SAVE_PATH,
+        court_model=court_model,
     )
 
     keypoints_tracker = KeypointsTracker(
@@ -175,6 +179,8 @@ if __name__ == "__main__":
     )
 
     runner.run()
+
+    ball_tracker.kalman_tracker.dump("result.html")
 
     if COLLECT_DATA:
         data = runner.data_analytics.into_dataframe(runner.video_info.fps)

@@ -65,7 +65,7 @@ class ExtendedKalmanFilter:
     def track(self, measurements):
         states = []
         for measurement in measurements:
-            self.update(measurement)
+            self.update(measurement['xy'])
             self.predict()
             states.append(self.get_state())
 

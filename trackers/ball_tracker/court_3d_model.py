@@ -1,9 +1,8 @@
 from scipy import stats
-
-from trackers.ball_tracker.kalman3d_tracking import KalmanFilter3DTracking
-from trackers.keypoints_tracker.keypoints_tracker import Keypoints
-
+import plotly.graph_objects as go
 import numpy as np
+
+from trackers.keypoints_tracker.keypoints_tracker import Keypoints
 
 
 class Court3DModel:
@@ -15,19 +14,25 @@ class Court3DModel:
         :param court_width: Width of the court in meters (standard is 10 meters)
         :param court_length: Length of the court in meters (standard is 20 meters)
         """
+        self.width = court_width
+        self.length = court_length
+        self.height = court_height
+
+        self.keypoint_correspondence = {
+            0: [0, 0, 0],  # k1
+            1: [self.width, 0, 0],  # k2
+            5: [0, self.length / 2, 0],  # k6
+            6: [self.width, self.length / 2, 0],  # k7
+            10: [0, self.length, 0],  # k11
+            11: [self.width, self.length, 0],  # k12
+            12: [0, 0, self.height],  # k13
+            13: [self.width, 0, self.height],  # k14
+        }
+
         self.keypoints = keypoints
-        self.court_width = court_width
-        self.court_length = court_length
-        self.court_height = court_height
         self.depth_vanishing_point = self._determine_vanishing_point(indexes=[[0, 5, 10], [1, 6, 11]])
         self.height_vanishing_point = self._determine_vanishing_point(indexes=[[0, 12], [1, 13]])
         self.projection_matrix = self._determine_projection_matrix()
-        self.kf = KalmanFilter3DTracking(
-            projection_matrix=self.projection_matrix,
-            width=self.court_width,
-            length=self.court_length,
-            height=self.court_height
-        )
 
     def _determine_vanishing_point(self, indexes):
         line1_keypoints = [self.keypoints.keypoints_by_id[i].xy for i in indexes[0]]
@@ -48,18 +53,8 @@ class Court3DModel:
 
     def _determine_projection_matrix(self):
         # This determines the correspondence between keypoints and their expected world coordinates
-        keypoint_correspondence = {
-            0: [0, 0, 0],  # k1
-            1: [self.court_width, 0, 0],  # k2
-            5: [0, self.court_length / 2, 0],  # k6
-            6: [self.court_width, self.court_length / 2, 0],  # k7
-            10: [0, self.court_length, 0],  # k11
-            11: [self.court_width, self.court_length, 0],  # k12
-            12: [0, 0, self.court_height],  # k13
-            13: [self.court_width, 0, self.court_height],  # k14
-        }
 
-        image_points_idx, world_points = zip(*keypoint_correspondence.items())
+        image_points_idx, world_points = zip(*self.keypoint_correspondence.items())
 
         image_points = np.array([
             [self.keypoints.keypoints_by_id[idx].xy[0], self.keypoints.keypoints_by_id[idx].xy[1]]
@@ -80,21 +75,88 @@ class Court3DModel:
 
         return P
 
-    def track(self, points, dt=1. / 30):
-        # Add timestamp to each datapoint
-        xyt = [
-            [p['xy'][0], p['xy'][1], t]
-            for p, t in zip(points, np.linspace(start=0, stop=len(points), num=len(points)) * dt)
-        ]
+    def world2image(self, x) -> np.ndarray:
+        """
+        Compute the image of a world vector x
+        :param x: 3D world vector
+        :return: 2D image vector
+        """
+        # Project the current 3D state to the 2D image space using the projection matrix
+        observation_homogeneous = np.dot(self.projection_matrix, np.append(x, 1))  # Append 1 for homogeneous coords
 
-        # State space will be denoted by X in homogeneous coordinates
-        # X = [x, y, z, vx, vy, vz, 1]
-        # Observation space will be denoted by Z
-        # Z = [u, v]
+        # Normalize homogeneous coordinates (x', y', w) to (x/w, y/w)
+        x_img = observation_homogeneous[0] / observation_homogeneous[2]
+        y_img = observation_homogeneous[1] / observation_homogeneous[2]
 
-        for x, y, t in xyt:
-            self.kf.predict()  # Predict next state
-            self.kf.update([x, y])  # Update with measurement
+        # Construct the predicted 2D measurement from the projected 3D point
+        return np.array([x_img, y_img])
+
+    def plot_2D_court(self):
+        """
+        Plot the court, with the ground lines and the height lines in 2D using matplotlib
+        using the perspective projection matrix
+        """
+        fig = go.Figure()
+
+        # Make y axis upside-down
+        fig.update_yaxes(autorange="reversed")
+
+        # Use the keypoint correspondences to obtain their expected 2D locations
+        image_coords = {}
+        for keypoint_id, world_coords in self.keypoint_correspondence.items():
+            image_coords[keypoint_id] = self.world2image(world_coords)
+            fig.add_trace(go.Scatter(x=[image_coords[keypoint_id][0]], y=[image_coords[keypoint_id][1]], mode='markers', name=f'k{keypoint_id}'))
+
+        court_lines = [[0, 1], [1, 6], [6, 11], [11, 10], [10, 5], [5, 0], [0, 12], [1, 13], [12, 13]]
+        for line in court_lines:
+            fig.add_trace(go.Line(x=[image_coords[line[0]][0], image_coords[line[1]][0]], y=[image_coords[line[0]][1], image_coords[line[1]][1]], mode='lines'))
+
+        return fig
+
+    def plot_3D_court(self):
+        """
+        Plot the court, with the ground lines and the height lines in 3D using plotly
+        """
+        import plotly.graph_objects as go
+
+        fig = go.Figure()
+
+        # Add the court lines
+        fig.add_trace(go.Scatter3d(
+            x=[0, self.width, self.width, 0, 0],
+            y=[0, 0, self.length, self.length, 0],
+            z=[0, 0, 0, 0, 0],
+            mode='lines',
+            name='Ground lines'
+        ))
+
+        fig.add_trace(go.Scatter3d(
+            x=[0, self.width, self.width, 0, 0],
+            y=[0, 0, 0, 0, 0],
+            z=[0, 0, self.height, self.height, 0],
+            mode='lines',
+            name='Height lines'
+        ))
+
+        # Add the vanishing points
+        fig.add_trace(go.Scatter3d(
+            x=[self.depth_vanishing_point[0]],
+            y=[self.depth_vanishing_point[1]],
+            z=[self.depth_vanishing_point[2]],
+            mode='markers',
+            name='Depth vanishing point'
+        ))
+
+        fig.add_trace(go.Scatter3d(
+            x=[self.height_vanishing_point[0]],
+            y=[self.height_vanishing_point[1]],
+            z=[self.height_vanishing_point[2]],
+            mode='markers',
+            name='Height vanishing point'
+        ))
+
+        fig.show()
+
 
 
 # Function to compute the line equation (slope and intercept) from a set of points

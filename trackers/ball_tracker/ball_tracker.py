@@ -12,6 +12,8 @@ from torch.utils.data import DataLoader, IterableDataset
 import torch
 import supervision as sv
 
+from trackers.ball_tracker.court_3d_model import Court3DModel
+from trackers.ball_tracker.kalman3d_tracking import KalmanFilter3DTracking
 from trackers.ball_tracker.models import TrackNet, InpaintNet
 from trackers.ball_tracker.dataset import BallTrajectoryDataset
 from trackers.ball_tracker.iterable import BallTrajectoryIterable
@@ -151,14 +153,16 @@ class Ball(Object):
     def __init__(
         self, 
         frame: int, 
-        xy: tuple[float, float], 
-        visibility: Literal[0,1],
+        xy: tuple[float, float],
+        xyz: Optional[tuple[float, float, float]],
+        visibility: Literal[0, 1],
         projection: Optional[tuple[int, int]] = None                    
     ):
         super().__init__()
 
         self.frame = frame
         self.xy = xy
+        self.xyz = xyz
         self.visibility = visibility
         self.projection = projection
 
@@ -170,6 +174,7 @@ class Ball(Object):
         return {
             "frame": self.frame,
             "xy": self.xy,
+            "xyz": self.xyz,
             "visibility": self.visibility,
             "projection": self.projection,
         }
@@ -241,6 +246,7 @@ class BallTracker(Tracker):
         median: Optional[np.ndarray] = None,
         load_path: Optional[str | Path] = None,
         save_path: Optional[str | Path] = None,
+        court_model: Optional[Court3DModel] = None,
     ):
         super().__init__(
             load_path=load_path,
@@ -276,6 +282,11 @@ class BallTracker(Tracker):
         self.batch_size = batch_size
         self.median_max_sample_num = median_max_sample_num
         self.median = median
+
+        if court_model is not None:
+            self.kalman_tracker = KalmanFilter3DTracking(court_model=court_model)
+        else:
+            self.kalman_tracker = None
     
     def video_info_post_init(self, video_info: sv.VideoInfo) -> "BallTracker":
         self.video_info = video_info
@@ -678,10 +689,18 @@ class BallTracker(Tracker):
         for frame_counter in range(video_len):
             if frame_counter in pred_dict["Frame"]:
                 i = pred_dict["Frame"].index(frame_counter)
+                xy = (pred_dict["X"][i], pred_dict["Y"][i])
+                if self.kalman_tracker is not None:
+                    self.kalman_tracker.predict()
+                    self.kalman_tracker.update(xy)
+                    xyz = list([*self.kalman_tracker.get_state()[:3]])
+                else:
+                    xyz = None
                 ball_detections.append(
                     Ball(
                         frame=frame_counter,
-                        xy=(pred_dict["X"][i], pred_dict["Y"][i]),
+                        xy=xy,
+                        xyz=xyz,
                         visibility=pred_dict["Visibility"][i]
                     )
                 )

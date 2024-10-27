@@ -7,7 +7,7 @@ INPUT_VIDEO_PATH = "./examples/videos/rally.mp4"
 OUTPUT_VIDEO_PATH = "results.mp4"
 
 # True to collect 2d projection data
-COLLECT_DATA = True
+COLLECT_DATA = False
 # Collected data path
 COLLECT_DATA_PATH = "data.csv"
 
