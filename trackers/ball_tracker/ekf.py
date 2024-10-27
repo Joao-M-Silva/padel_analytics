@@ -58,7 +58,7 @@ class ExtendedKalmanFilter:
         # Compute the Kalman gain K (7x2)
         K = np.dot(np.dot(self.P, H[:2].T), np.linalg.inv(S))  # P H^T S^{-1}
 
-        # Update state estimate (3D position and velocity) and covariance
+        # Update state estimate (position and velocity) and covariance
         self.x = self.x + np.dot(K, y)
         self.P = self.P - np.dot(np.dot(K, H[:2]), self.P)
 

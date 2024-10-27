@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
@@ -10,7 +12,6 @@ class MockExtendedKalmanFilter(ExtendedKalmanFilter):
     """
     Implement a simple KalmanFilter for testing purposes.
     The ball lives in 2D and just bounces on the floor.
-    Once in a while it gets a kick in a random direction.
     """
 
     def __init__(self, x0, p=.1, q=.1, r=.1):
@@ -68,7 +69,7 @@ class MockExtendedKalmanFilter(ExtendedKalmanFilter):
 @fixture
 def ekf():
     """
-    A simple 1D fall model
+    Initialize the Kalman Filter in order to track the ball location
     """
     ekf_instance = MockExtendedKalmanFilter(
         x0=np.array([0, 1, 1, 0, 1]),
@@ -81,6 +82,9 @@ def ekf():
 
 @fixture
 def true_states(ekf):
+    """
+    Generate a sequence of true ball locations, to be used as ground truth to test the Kalman filter
+    """
     ekf_copy = ekf.reset()
     # Generate true state values
     ts = []
@@ -97,6 +101,9 @@ def true_states(ekf):
 
 @fixture
 def noisy_measurements(true_states, ekf):
+    """
+    Simulate noisy measurements of true ball locations, to be fed to the Kalman filter
+    """
     # Generate noisy measurements
     measurements = []
     for state in true_states:
@@ -109,31 +116,71 @@ def noisy_measurements(true_states, ekf):
 
 class TestExtendedKalman:
     def test_predict(self, ekf):
-        states = []
+        """
+        Test that predictions are tracked by the filter
+        Test that prediction uncertainties are tracked by the filter
+        """
         for i in range(10):
-            states.append(ekf.x)
             ekf.predict()
 
-        assert ekf.x is not None
-        assert ekf.P is not None
+        assert len(ekf.states) == 10
+        assert len(ekf.state_uncertainties) == 10
 
     def test_bounce(self, ekf):
         """
         Make sure that the prediction never goes below the zero line
         """
         states = []
-        for i in range(40):
-            states.append(ekf.x)
+        for i in range(100):
             ekf.predict()
 
-        states = np.array(states)
+        states = np.array(ekf.states)
 
         assert all(states[:, 0] >= 0)
 
-    def test_update(self, ekf, true_states, noisy_measurements):
+    def test_kalman_gain(self, ekf, true_states, noisy_measurements):
         """
-        Assert that the update method takes the uncertainty into account
+        Assert that the update method takes the measurement noise into account
+        - Smaller R means (larger Gain) means new state more sensitive to measurements
+        - Larger R means (smaller Gain) means new state less sensitive to measurements
         """
+
+        # Track the ball for 10 steps
+        for i in range(10):
+            ekf.predict()
+            ekf.update(noisy_measurements[i])
+
+        # Deepcopy the filter
+        ekf_copy_larger_r = deepcopy(ekf)
+        ekf_copy_smaller_r = deepcopy(ekf)
+
+        # Set a much larger measurement noise for one of the filters
+        ekf_copy_larger_r.R = ekf.R * 2
+        ekf_copy_smaller_r.R = ekf.R / 2
+
+        # Predict and update all filters with the next measurement
+        ekf.predict()
+        ekf.update(noisy_measurements[10])
+        ekf_copy_larger_r.predict()
+        ekf_copy_larger_r.update(noisy_measurements[10])
+        ekf_copy_smaller_r.predict()
+        ekf_copy_smaller_r.update(noisy_measurements[10])
+
+        # Check that the filter with less noise predicts a state closer to the true state
+        ekf_state = ekf.x
+        ekf_copy_larger_r_state = ekf_copy_larger_r.x
+        ekf_copy_smaller_r_state = ekf_copy_smaller_r.x
+
+        # Measure the baseline distance from the internal state to the last measurement
+        reference_distance_to_measurement = np.linalg.norm(ekf_state[:2] - noisy_measurements[10])
+
+        # With smaller gain, the state should be further to the measurement
+        assert np.linalg.norm(ekf_copy_larger_r_state[:2] - noisy_measurements[10]) > reference_distance_to_measurement
+
+        # With larger gian, the state should be closer to the measurement
+        assert np.linalg.norm(ekf_copy_smaller_r_state[:2] - noisy_measurements[10]) < reference_distance_to_measurement
+
+    def test_plot(self, ekf, true_states, noisy_measurements):
 
         # Update the filter with the noisy measurements
         states = ekf.track(noisy_measurements)
