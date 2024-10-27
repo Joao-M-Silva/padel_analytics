@@ -1,6 +1,6 @@
 from scipy import stats
 
-from trackers.ball_tracker.kalman import KalmanFilter3DTracking
+from trackers.ball_tracker.kalman3d_tracking import KalmanFilter3DTracking
 from trackers.keypoints_tracker.keypoints_tracker import Keypoints
 
 import numpy as np
