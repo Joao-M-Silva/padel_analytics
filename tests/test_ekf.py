@@ -9,7 +9,8 @@ from trackers.ball_tracker.ekf import ExtendedKalmanFilter
 class MockExtendedKalmanFilter(ExtendedKalmanFilter):
     """
     Implement a simple KalmanFilter for testing purposes.
-    The ball lives in 2D and just bounces on the floor. (Y coordinate discarded)
+    The ball lives in 2D and just bounces on the floor.
+    Once in a while it gets a kick in a random direction.
     """
 
     def __init__(self, x0, p=.1, q=.1, r=.1):
