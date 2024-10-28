@@ -282,12 +282,13 @@ class BallTracker(Tracker):
         self.batch_size = batch_size
         self.median_max_sample_num = median_max_sample_num
         self.median = median
+        self.kalman_tracker = None
 
         if court_model is not None:
             self.kalman_tracker = KalmanFilter3DTracking(court_model=court_model)
         else:
             self.kalman_tracker = None
-    
+
     def video_info_post_init(self, video_info: sv.VideoInfo) -> "BallTracker":
         self.video_info = video_info
         return self
@@ -696,12 +697,14 @@ class BallTracker(Tracker):
                     xyz = list([*self.kalman_tracker.get_state()[:3]])
                 else:
                     xyz = None
+
                 ball_detections.append(
                     Ball(
                         frame=frame_counter,
                         xy=xy,
                         xyz=xyz,
-                        visibility=pred_dict["Visibility"][i]
+                        visibility=pred_dict["Visibility"][i],
+                        projection=xyz[:2]
                     )
                 )
             else:
@@ -710,6 +713,7 @@ class BallTracker(Tracker):
                     Ball(
                         frame=frame_counter,
                         xy=(0.0, 0.0),
+                        xyz=(0., 0., 0.),
                         visibility=0,
                     )
                 )

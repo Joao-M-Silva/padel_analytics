@@ -29,6 +29,12 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
         super().__init__(P, Q, R, x0)
         self.g = g
 
+    def update(self, z):
+        if z == (0, 0):
+            # There was no detection so skip this update step
+            return None
+        return super().update(z)
+
     def estimate_initial_state(self, observations):
         def project_to_2d(points_3d):
             return np.array([self.court_model.world2image(x) for x in points_3d])

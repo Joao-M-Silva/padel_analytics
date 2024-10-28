@@ -183,7 +183,7 @@ class TestExtendedKalman:
     def test_plot(self, ekf, true_states, noisy_measurements):
 
         # Update the filter with the noisy measurements
-        states = ekf.track(noisy_measurements)
+        states = ekf.track([{'xy': nm} for nm in noisy_measurements])
 
         df = pd.DataFrame(
             dict(
@@ -199,10 +199,3 @@ class TestExtendedKalman:
                 y_obs=noisy_measurements[:, 1]
             )
         )
-
-        # Plot the true states, measurements and the inferred states
-        fig, ax = plt.subplots(ncols=2)
-        df.plot(x='x_obs', y='y_obs', ax=ax[0], style='o', label='Measurements')
-        df.plot(x='x_true', y='y_true', ax=ax[1], label='True state')
-        df.plot(x='x_inf', y='y_inf', ax=ax[1], label='Inferred state')
-        # plt.show()

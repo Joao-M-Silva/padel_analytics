@@ -68,4 +68,9 @@ class TestCourtModel:
                 decimal=2
             )
 
-        court_model.plot_2D_court().show()
+        court_model.plot_2D_court()
+
+    def test_homography_and_projection_matrices(self):
+        # TODO: This test should verify that the homography matrix obtained by the ProjectedCourt model
+        #  is a submatrix of the projection matrix
+        pass

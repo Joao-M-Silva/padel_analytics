@@ -9,7 +9,6 @@ class Test3DFilter:
         k_filter = KalmanFilter3DTracking(court_model=court_model)
         dt = 1. / 30
 
-#        detections = ball_detections[155:186]
         detections = ball_detections[:20]
         observations = [[ball['xy'][0], ball['xy'][1], t * dt] for t, ball in enumerate(detections)]
 
@@ -31,7 +30,7 @@ class Test3DFilter:
         assert len(x) == len(ball_detections)
 
         fig = filter.plot()
-        fig.show()
+        # fig.show()
         # Save to file
         with open("../render.html", "w") as f:
             f.write(fig.to_html())
@@ -63,7 +62,7 @@ class Test3DFilter:
         mean_vel = inferred_abs_vel.mean()
         std_vel = inferred_abs_vel.std()
 
-        k_filter.dump("test.html")
+        # k_filter.dump("test.html")
 
         # If the inferred position were too dependent on ball detection glitches, the velocity have high spikes
         assert all(inferred_abs_vel < mean_vel + 3 * std_vel)

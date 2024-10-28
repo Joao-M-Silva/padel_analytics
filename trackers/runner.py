@@ -11,6 +11,7 @@ import cv2
 import supervision as sv
 
 from config import COLLECT_DATA
+from trackers.ball_tracker.court_3d_model import Court3DModel
 from trackers.players_tracker.players_tracker import Players
 from trackers.ball_tracker.ball_tracker import Ball
 from trackers.keypoints_tracker.keypoints_tracker import Keypoints
@@ -40,9 +41,10 @@ class TrackingRunner:
         trackers: list[Tracker],
         video_path: str | Path,
         inference_path: str | Path,
+        court_model: Court3DModel,
         start: int = 0,
         end: Optional[int] = None,
-        collect_data: bool = False, 
+        collect_data: bool = False,
     ) -> None:
     
         self.video_path = video_path
@@ -51,6 +53,7 @@ class TrackingRunner:
         self.stride = 1
         self.end = end
         self.video_info = sv.VideoInfo.from_video_path(video_path=video_path)
+        self.court_model = court_model
 
         if self.end is None:
             self.total_frames = self.video_info.total_frames
@@ -153,6 +156,7 @@ class TrackingRunner:
                 ball_detection=ball_detection,
                 data_analytics=self.data_analytics,
                 is_fixed_keypoints=self.is_fixed_keypoints,
+                court_model=self.court_model,
             )
 
             """ CAREFUL HERE (READ THE CODE CAREFULLY)"""
