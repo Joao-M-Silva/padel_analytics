@@ -171,7 +171,12 @@ class Tracker(ABC):
     
     @property
     def DEVICE(self) -> str:
-        return "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            return "cuda"
+        elif torch.mps.is_available():
+            return "mps"
+        else:
+            return "cpu"
 
     @abstractmethod
     def restart(self) -> None:
@@ -240,7 +245,7 @@ class Tracker(ABC):
         
         print(f"{self.__str__()}: {self.__len__()} predictions loaded.")
 
-    def to(self, device: Literal["cuda", "cpu"]) -> None:
+    def to(self, device: Literal["cuda", "cpu", "mps"]) -> None:
         """
         Move tracker model/models to the given device
 
