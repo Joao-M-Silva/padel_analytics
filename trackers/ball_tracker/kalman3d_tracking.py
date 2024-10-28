@@ -1,5 +1,6 @@
 import numpy as np
 import plotly.graph_objs as go
+from scipy.optimize import least_squares
 
 from trackers.ball_tracker.court_3d_model import Court3DModel
 from trackers.ball_tracker.ekf import ExtendedKalmanFilter
@@ -10,7 +11,7 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
     Implements the physics model for tracking a ball in 3D space using an Extended Kalman filter.
     """
 
-    def __init__(self, court_model: Court3DModel, g=9.81, q=0.1, r=.01):
+    def __init__(self, court_model: Court3DModel, x0=None, g=9.81, q=0.1, r=100):
         self.court_model = court_model
         self.width = court_model.width
         self.length = court_model.length
@@ -22,10 +23,67 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
         R = np.eye(2) * r  # Measurement noise covariance
         # Initial state (position and velocity)
         # Assume ball starts in the middle of the court
-        x0 = np.array([self.width / 2, self.length / 2, self.height / 2, 0, 0, 0, 1])
-        P = np.diag([self.width, self.length, self.height, self.width / 10, self.width / 10, self.width / 10, 0])  # Initial state uncertainty
+        x0 = x0 if x0 is not None else np.array([self.width / 2, self.length / 2, self.height / 2, 0, 0, 0, 1])
+        P = np.diag([self.width, self.length, self.height, self.width / 10, self.width / 10, self.width / 10,
+                     0])  # Initial state uncertainty
         super().__init__(P, Q, R, x0)
         self.g = g
+
+    def estimate_initial_state(self, observations):
+        def project_to_2d(points_3d):
+            return np.array([self.court_model.world2image(x) for x in points_3d])
+
+        def parabolic_trajectory(t, x0, y0, z0, vx, vy, vz, g=9.81):
+            """
+            Compute the 3D position of the ball at time t for a parabolic trajectory.
+            """
+            x = x0 + vx * t
+            y = y0 + vy * t
+            z = z0 + vz * t - 0.5 * g * t ** 2
+            return np.stack([x, y, z], axis=-1)
+
+        def residuals(params, t_values, observed_2d):
+            """
+            Compute residuals between observed 2D points and projected 3D points.
+            """
+            x0, y0, z0, vx, vy, vz = params
+            points_3d = parabolic_trajectory(np.array(t_values), x0, y0, z0, vx, vy, vz)
+            projected_2d = project_to_2d(points_3d)
+            return (projected_2d - observed_2d).ravel()
+
+        # Initial guess for the parameters
+
+        # Define known values: time values and observed 2D points
+        u, v, t_values = zip(*observations)
+        observed_2d = np.array(list(zip(u, v)))  # Observed 2D points (Nx2 array)
+
+        # Initial guess for [x0, y0, z0, vx, vy, vz]
+        initial_guess = [self.width / 2, self.length / 2, self.height / 2, 0, 0, 0]
+
+        bounds = [
+            [0, 0, 0, -np.inf, -np.inf, -np.inf],
+            [self.width, self.length, np.inf, np.inf, np.inf, np.inf]
+        ]
+
+        # Perform least-squares fitting
+        result = least_squares(
+            residuals,
+            initial_guess,
+            args=(t_values, observed_2d),
+            bounds=bounds,
+            loss='cauchy',
+            method='dogbox'
+        )
+
+        # Extract optimized parameters
+        x0, y0, z0, vx, vy, vz = result.x
+        print("Optimized initial position:", (x0, y0, z0))
+        print("Optimized initial velocity:", (vx, vy, vz))
+        print("R_squared:", 1 - result.cost / np.linalg.norm(observed_2d - observed_2d.mean(axis=0)) ** 2)
+
+        estimated_initial_state = [x0, y0, z0, vx, vy, vz, 1]
+
+        return estimated_initial_state
 
     def observation_function(self, x):
         return self.court_model.world2image(x[:3])
@@ -80,7 +138,6 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
         with open(filename, "w") as f:
             f.write(fig.to_html())
 
-
     def plot(self, projection_matrix=None):
         if projection_matrix is not None:
             # Get video perspective
@@ -102,7 +159,7 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
 
         x_range = [0, self.width]
         y_range = [0, self.length]
-        z_range = [z_positions.min(), z_positions.max()]
+        z_range = [min(0, z_positions.min()), max(z_positions.max(), self.height)]
 
         # Create a base figure with the full trajectory as a static line in light gray
         fig = go.Figure()
@@ -134,6 +191,7 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
                 ],
                 layout=dict(
                     scene=dict(
+                        aspectmode='data',
                         xaxis=dict(range=x_range, autorange=False),
                         yaxis=dict(range=y_range, autorange=False),
                         zaxis=dict(range=z_range, autorange=False)
@@ -148,6 +206,7 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
         fig.update_layout(
             title="3D Animation of Ball Position with Static Trajectory",
             scene=dict(
+                aspectmode='data',
                 xaxis=dict(title="X Position", range=[0, self.width], autorange=False),
                 yaxis=dict(title="Y Position", range=y_range, autorange=False),
                 zaxis=dict(title="Z Position", range=z_range, autorange=False)
@@ -172,7 +231,6 @@ class KalmanFilter3DTracking(ExtendedKalmanFilter):
             )]
 
         )
-
 
         return fig
 
