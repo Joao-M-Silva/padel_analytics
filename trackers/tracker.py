@@ -245,7 +245,7 @@ class Tracker(ABC):
         
         print(f"{self.__str__()}: {self.__len__()} predictions loaded.")
 
-    def to(self, device: Literal["cuda", "cpu"]) -> None:
+    def to(self, device: Literal["cuda", "cpu", "mps"]) -> None:
         """
         Move tracker model/models to the given device
 
