@@ -23,7 +23,7 @@ The goal of this project is to provide precise and robust analytics using only a
 #### 1. Clone this repository.
 #### 2. Setup virtual environment.
 ```
-conda create -n python=3.12 padel_analytics pip
+conda create -n padel_analytics python=3.12 pip
 conda activate padel_analytics
 pip install -r requirements.txt
 ```
