@@ -5,6 +5,7 @@ import numpy as np
 import supervision as sv
 
 from constants import BASE_LINE, SIDE_LINE, SERVICE_SIDE_LINE, NET_SIDE_LINE
+from trackers.ball_tracker.court_3d_model import Court3DModel
 from utils import convert_meters_to_pixel_distance, convert_pixel_distance_to_meters
 from trackers import Player, Players, Keypoint, Keypoints, Ball
 from analytics.data_analytics import DataAnalytics
@@ -107,7 +108,7 @@ class ProjectedCourtKeypoints:
 
     def keypoints(
         self, 
-        number_keypoints: Literal[12, 18, 22],
+        number_keypoints: Literal[12, 14, 18, 22],
     ) -> list[Keypoint]:
         
         keypoints_12 = [
@@ -415,7 +416,26 @@ class ProjectedCourt:
                     keypoint.xy
                     for keypoint in dst_keypoints
                 ]
-            ) 
+            )
+        elif len(keypoints_detection) == 14:
+            src_keypoints = keypoints_detection
+            # Court keypoints of the given frame
+            src_points = np.array(
+                [
+                    keypoint.xy
+                    for keypoint in src_keypoints
+                ]
+            )
+            dst_keypoints = self.court_keypoints.keypoints(
+                number_keypoints=14,
+            )
+            # Projected court keypoints
+            dst_points = np.array(
+                [
+                    keypoint.xy
+                    for keypoint in dst_keypoints
+                ]
+            )
         elif len(keypoints_detection) == 18:
             src_keypoints = keypoints_detection
             # Court keypoints of the given frame
@@ -500,7 +520,7 @@ class ProjectedCourt:
         dst_point = dst_point / dst_point[2]
 
         return (dst_point[0], dst_point[1])
-    
+
     def project_player(
         self, 
         player_detection: Player,
@@ -523,14 +543,18 @@ class ProjectedCourt:
         self, 
         ball_detection: Ball,
         homography_matrix: np.ndarray,
+        court_model: Court3DModel
     ) -> Ball:
-        
         """
         Ball detection 2d court projection
         """
+
+        # Get ground coordinates of the ball and map them to image space, then use homography to project onto analytics court
+        ground_xy = np.append(ball_detection.xyz[:2], 0)
+        image_xy = court_model.world2image(ground_xy)
         
         projected_point = self.project_point(
-            point=ball_detection.asint(),
+            point=image_xy.astype(int),
             homography_matrix=homography_matrix,
         )
 
@@ -592,7 +616,7 @@ class ProjectedCourt:
         frame: np.ndarray,
         ball_detection: Ball,
         homography_matrix: np.ndarray,
-        
+        court_model: Court3DModel
     ) -> np.ndarray:
         """
         Project and draw ball
@@ -601,6 +625,7 @@ class ProjectedCourt:
         projected_ball = self.project_ball(
             ball_detection=ball_detection,
             homography_matrix=homography_matrix,
+            court_model=court_model
         )
 
         return projected_ball.draw_projection(frame)
@@ -611,6 +636,7 @@ class ProjectedCourt:
         keypoints_detection: Keypoints,
         players_detection: Optional[Players],
         ball_detection: Optional[Ball],
+        court_model: Court3DModel,
         data_analytics: Optional[DataAnalytics] = None,
         is_fixed_keypoints: bool = False,
     ) -> tuple[np.ndarray, DataAnalytics]:
@@ -633,13 +659,15 @@ class ProjectedCourt:
         if self.H is None:
             if keypoints_detection:
                 print("projected_court: First homography matrix calculation ...")
-                self.H = self.homography_matrix(keypoints_detection)
+                # TODO: Account for the case where 14 keypoints are provided
+                self.H = self.homography_matrix(keypoints_detection[:12])
                 print("projected_court: Done.")
         else:
             if not(is_fixed_keypoints):
                 if keypoints_detection:
                     print("projected_court: Homography matrix calculation ...")
-                    self.H = self.homography_matrix(keypoints_detection)
+                    # TODO: Account for the case where 14 keypoints are provided
+                    self.H = self.homography_matrix(keypoints_detection[:12])
                     print("projected_court: Done.")
                 else:
                     # Can't calculate homography for this frame
@@ -661,6 +689,7 @@ class ProjectedCourt:
                 output_frame,
                 ball_detection=ball_detection,
                 homography_matrix=self.H,
+                court_model=court_model
             )
         else:
             print("projected_court: Missing data for ball projection")

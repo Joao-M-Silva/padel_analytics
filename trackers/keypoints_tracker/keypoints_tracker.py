@@ -16,7 +16,6 @@ from trackers.tracker import Object, Tracker, NoPredictFrames, NoPredictSample
 
 
 class Keypoint:
-
     """
     Padel court keypoint detection in a given video frame
 
@@ -32,13 +31,13 @@ class Keypoint:
     @classmethod
     def from_json(cls, x: dict):
         return cls(**x)
-    
+
     def serialize(self) -> dict:
         return {
             "id": self.id,
             "xy": self.xy,
         }
-    
+
     def asint(self) -> tuple[int, int]:
         return tuple(int(v) for v in self.xy)
 
@@ -50,7 +49,7 @@ class Keypoint:
         x, y = self.asint()
 
         cv2.putText(
-            frame, 
+            frame,
             str(self.id + 1),
             (x + 5, y - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
@@ -68,10 +67,9 @@ class Keypoint:
         )
 
         return frame
-    
+
 
 class Keypoints(Object):
-
     """
     Court multiple keypoint detection in a given video frame
     """
@@ -93,25 +91,33 @@ class Keypoints(Object):
                 for keypoint_json in x
             ]
         )
-    
+
     def serialize(self) -> list[dict]:
         return [
             keypoint.serialize()
             for keypoint in self.keypoints
         ]
-    
+
     def __len__(self) -> int:
         return len(self.keypoints)
-    
+
     def __iter__(self) -> Iterable[Keypoint]:
         return (keypoint for keypoint in self.keypoints)
-    
-    def __getitem__(self, id: int) -> Keypoint:
-        return self.keypoints_by_id[id]
+
+    def __getitem__(self, id: int or slice) -> Keypoint or list[Keypoint]:
+        if isinstance(id, int):
+            return self.keypoints_by_id[id]
+        elif isinstance(id, slice):
+            return Keypoints([
+                self.keypoints[idx]
+                for idx in range(id.start or 0, id.stop or len(self.keypoints), id.step or 1)
+            ])
+        else:
+            raise ValueError
 
     def draw(self, frame: np.ndarray) -> np.ndarray:
         """
-        Draw court keypoints detection in a given frame 
+        Draw court keypoints detection in a given frame
         """
         for keypoint in self.keypoints:
             frame = keypoint.draw(frame)
@@ -120,7 +126,6 @@ class Keypoints(Object):
 
 
 class KeypointsTracker(Tracker):
-
     """
     Tracker of court keypoints object
 
@@ -135,17 +140,17 @@ class KeypointsTracker(Tracker):
 
     NUMBER_KEYPOINTS = 12
     TRAIN_IMAGE_SIZE = 640
-    CONF=0.5
-    IOU=0.7
-    
+    CONF = 0.5
+    IOU = 0.7
+
     def __init__(
-        self, 
-        model_path: str,
-        batch_size: int,
-        model_type: Literal["resnet", "yolo"] = "resnet",
-        fixed_keypoints_detection: Optional[Keypoints] = None,
-        load_path: Optional[str | Path] = None,
-        save_path: Optional[str | Path] = None,
+            self,
+            model_path: str,
+            batch_size: int,
+            model_type: Literal["resnet", "yolo"] = "resnet",
+            fixed_keypoints_detection: Optional[Keypoints] = None,
+            load_path: Optional[str | Path] = None,
+            save_path: Optional[str | Path] = None,
     ):
         super().__init__(
             load_path=load_path,
@@ -158,8 +163,8 @@ class KeypointsTracker(Tracker):
         if model_type == "resnet":
             self.model = models.resnet50(pretrained=True)
             self.model.fc = torch.nn.Linear(
-                self.model.fc.in_features, 
-                self.NUMBER_KEYPOINTS*2,
+                self.model.fc.in_features,
+                self.NUMBER_KEYPOINTS * 2,
             )
 
             state_dict = torch.load(model_path)
@@ -174,16 +179,16 @@ class KeypointsTracker(Tracker):
 
     def video_info_post_init(self, video_info: sv.VideoInfo) -> "KeypointsTracker":
         return self
-    
+
     def object(self) -> Type[Object]:
         return Keypoints
-    
+
     def draw_kwargs(self) -> dict:
         return {}
-    
+
     def __str__(self) -> str:
         return "keypoints_tracker"
-    
+
     def restart(self) -> None:
         self.results.restart()
 
@@ -192,10 +197,10 @@ class KeypointsTracker(Tracker):
         return Image.fromarray(frame).resize(
             (self.TRAIN_IMAGE_SIZE, self.TRAIN_IMAGE_SIZE),
         )
-    
+
     def to(self, device: str) -> None:
         self.model.to(device)
-    
+
     def predict_sample(self, sample: Iterable[np.ndarray], **kwargs) -> list[Keypoints]:
         """
         Prediction over a sample of frames
@@ -226,7 +231,7 @@ class KeypointsTracker(Tracker):
             11: 3,
         }
 
-        h_frame, w_frame = sample[0].shape[:2] 
+        h_frame, w_frame = sample[0].shape[:2]
         ratio_x = w_frame / self.TRAIN_IMAGE_SIZE
         ratio_y = h_frame / self.TRAIN_IMAGE_SIZE
 
@@ -256,28 +261,28 @@ class KeypointsTracker(Tracker):
                     ),
                 )
                 keypoints.append(keypoint)
-            
+
             predictions.append(Keypoints(keypoints))
 
         return predictions
-            
+
     def predict_frames(self, frame_generator: Iterable[np.ndarray], **kwargs) -> list[Keypoints]:
-        
+
         if self.fixed_keypoints_detection is not None:
             print(f"{self.__str__()}: using fixed court keypoints")
             return [
                 self.fixed_keypoints_detection
                 for _ in frame_generator
             ]
-        
+
         if self.model_type == "yolo":
             raise NoPredictFrames()
-            
+
         iterable = KeypointsIterable(frame_generator)
 
         loader = DataLoader(
-            iterable, 
-            batch_size=self.batch_size, 
+            iterable,
+            batch_size=self.batch_size,
             shuffle=False,
             drop_last=False,
         )
@@ -287,7 +292,7 @@ class KeypointsTracker(Tracker):
             with torch.no_grad():
                 outputs = self.model(batch["image"].to(self.DEVICE))
                 outputs = torch.nn.Sigmoid()(outputs).cpu().detach().numpy()
-                    
+
                 for keypoints_detection in outputs:
                     predictions.append(
                         Keypoints(
@@ -300,16 +305,13 @@ class KeypointsTracker(Tracker):
                                     )
                                 )
                                 for i, keypoint in enumerate(
-                                    keypoints_detection.reshape(
-                                        self.NUMBER_KEYPOINTS, 
-                                        2,
-                                    )
+                                keypoints_detection.reshape(
+                                    self.NUMBER_KEYPOINTS,
+                                    2,
                                 )
+                            )
                             ]
                         )
                     )
 
         return predictions
-
-    
-    
