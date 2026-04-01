@@ -250,7 +250,7 @@ class BallTracker(Tracker):
         self.DELTA_T: float = 1 / math.sqrt(self.HEIGHT**2 + self.WIDTH**2)
         self.COOR_TH = self.DELTA_T * 50
 
-        tracknet_ckpt = torch.load(tracking_model_path)
+        tracknet_ckpt = torch.load(tracking_model_path, map_location='cpu')
         self.tracknet_seq_len = tracknet_ckpt['param_dict']['seq_len']
 
         assert self.tracknet_seq_len == self.TRAJECTORY_LENGTH
@@ -266,7 +266,7 @@ class BallTracker(Tracker):
         self.tracknet.eval()
 
         if inpainting_model_path:
-            inpaintnet_ckpt = torch.load(inpainting_model_path)
+            inpaintnet_ckpt = torch.load(inpainting_model_path, map_location='cpu')
             self.inpaintnet_seq_len = inpaintnet_ckpt['param_dict']['seq_len']
             self.inpaintnet = get_model('InpaintNet')
             self.inpaintnet.load_state_dict(inpaintnet_ckpt['model'])
@@ -551,7 +551,7 @@ class BallTracker(Tracker):
                 batch_size=self.batch_size, 
                 shuffle=False, 
                 drop_last=False,
-            ) # num_workers=num_workers, 
+            )
 
             weight = get_ensemble_weight(seq_len, self.EVAL_MODE)
 
@@ -566,15 +566,18 @@ class BallTracker(Tracker):
             )
 
             for (i, coor_pred, inpaint_mask) in tqdm(data_loader):
-                coor_pred, inpaint_mask = coor_pred.float(), inpaint_mask.float()
+                coor_pred = coor_pred.float().to(self.DEVICE)
+                inpaint_mask = inpaint_mask.float().to(self.DEVICE)
                 batch_size = i.shape[0]
                 with torch.no_grad():
                     coor_inpaint = self.inpaintnet(
-                        coor_pred.cuda(), 
-                        inpaint_mask.cuda(),
+                        coor_pred,
+                        inpaint_mask,
                     ).detach().cpu()
-                    
-                    coor_inpaint = coor_inpaint * inpaint_mask + coor_pred * (1-inpaint_mask)
+
+                    coor_pred_cpu = coor_pred.cpu()
+                    inpaint_mask_cpu = inpaint_mask.cpu()
+                    coor_inpaint = coor_inpaint * inpaint_mask_cpu + coor_pred_cpu * (1 - inpaint_mask_cpu)
                 
                 # Thresholding
                 th_mask = (
@@ -694,19 +697,5 @@ class BallTracker(Tracker):
                         visibility=0,
                     )
                 )
-
-        # for i, frame_index in enumerate(pred_dict["Frame"]):
-        #     if frame_counter == frame_index:
-        #         ball_detections.append(
-        #             Ball(
-        #                 frame=frame_index,
-        #                 xy=(pred_dict["X"][i], pred_dict["Y"][i]),
-        #                 visibility=pred_dict["Visibility"][i]
-        #             )
-        #         )
             
         return ball_detections
-
-        
-
-            

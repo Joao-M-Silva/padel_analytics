@@ -1,3 +1,4 @@
+.env
 __pycache__
 *.mp4
 *.avi

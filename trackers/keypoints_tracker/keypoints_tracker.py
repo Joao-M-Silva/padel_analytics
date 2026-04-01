@@ -13,6 +13,7 @@ import supervision as sv
 
 from trackers.keypoints_tracker.iterable import KeypointsIterable
 from trackers.tracker import Object, Tracker, NoPredictFrames, NoPredictSample
+from constants import BASE_LINE, SIDE_LINE, SERVICE_SIDE_LINE
 
 
 class Keypoint:
@@ -137,15 +138,39 @@ class KeypointsTracker(Tracker):
     TRAIN_IMAGE_SIZE = 640
     CONF=0.5
     IOU=0.7
+
+    # Physical court coordinates (metres) for each keypoint id (0-indexed, 0=k1 … 11=k12).
+    # Origin is the near-left baseline corner; x increases rightward, y increases toward far end.
+    #
+    #   k11(10)-------k12(11)   y = SIDE_LINE          (far baseline)
+    #   k8(7)--k9(8)--k10(9)   y = SIDE_LINE - SERVICE_SIDE_LINE
+    #   k6(5)---------k7(6)    y = SIDE_LINE / 2       (net)
+    #   k3(2)--k4(3)--k5(4)   y = SERVICE_SIDE_LINE
+    #   k1(0)---------k2(1)    y = 0                   (near baseline)
+    COURT_PHYSICAL_COORDS: dict[int, tuple[float, float]] = {
+        0:  (0.0,                    0.0),                          # k1
+        1:  (float(BASE_LINE),       0.0),                          # k2
+        2:  (0.0,                    float(SERVICE_SIDE_LINE)),      # k3
+        3:  (float(BASE_LINE) / 2,   float(SERVICE_SIDE_LINE)),      # k4
+        4:  (float(BASE_LINE),       float(SERVICE_SIDE_LINE)),      # k5
+        5:  (0.0,                    float(SIDE_LINE) / 2),          # k6
+        6:  (float(BASE_LINE),       float(SIDE_LINE) / 2),          # k7
+        7:  (0.0,                    float(SIDE_LINE) - float(SERVICE_SIDE_LINE)),  # k8
+        8:  (float(BASE_LINE) / 2,   float(SIDE_LINE) - float(SERVICE_SIDE_LINE)),  # k9
+        9:  (float(BASE_LINE),       float(SIDE_LINE) - float(SERVICE_SIDE_LINE)),  # k10
+        10: (0.0,                    float(SIDE_LINE)),              # k11
+        11: (float(BASE_LINE),       float(SIDE_LINE)),              # k12
+    }
     
     def __init__(
-        self, 
+        self,
         model_path: str,
         batch_size: int,
         model_type: Literal["resnet", "yolo"] = "resnet",
         fixed_keypoints_detection: Optional[Keypoints] = None,
         load_path: Optional[str | Path] = None,
         save_path: Optional[str | Path] = None,
+        conf: Optional[float] = None,
     ):
         super().__init__(
             load_path=load_path,
@@ -162,15 +187,74 @@ class KeypointsTracker(Tracker):
                 self.NUMBER_KEYPOINTS*2,
             )
 
-            state_dict = torch.load(model_path)
+            state_dict = torch.load(model_path, map_location='cpu')
             self.model.load_state_dict(state_dict)
             self.model.eval()
         elif model_type == "yolo":
             self.model = YOLO(model_path)
+            # Fix Pose layers saved with old ultralytics that lack self.detect attribute.
+            try:
+                from ultralytics.nn.modules.head import Detect
+                for m in self.model.model.modules():
+                    if type(m).__name__ == "Pose" and not hasattr(m, "detect"):
+                        m.detect = Detect.forward
+            except Exception:
+                pass
         else:
             raise ValueError("Unknown model type")
 
         self.fixed_keypoints_detection = fixed_keypoints_detection
+        if conf is not None:
+            self.CONF = conf
+
+    def _estimate_missing_keypoints(self, keypoints: list[Keypoint]) -> list[Keypoint]:
+        """
+        When fewer than 12 keypoints are detected, estimate the missing ones using
+        the known physical court geometry.
+
+        A perspective homography is computed from the detected keypoints' physical
+        court positions (metres) to their image positions (pixels).  That transform
+        is then used to project the physical positions of each missing keypoint into
+        image space, giving a geometrically consistent estimate.
+
+        Requires at least 4 detected keypoints to compute a valid homography.
+        Returns the original list unchanged if estimation is not possible.
+        """
+        if len(keypoints) >= self.NUMBER_KEYPOINTS or len(keypoints) < 4:
+            return keypoints
+
+        detected_ids = {kp.id for kp in keypoints}
+        missing_ids = set(self.COURT_PHYSICAL_COORDS.keys()) - detected_ids
+        if not missing_ids:
+            return keypoints
+
+        # Build (physical → image) correspondences from detected keypoints
+        src_points = np.array(
+            [self.COURT_PHYSICAL_COORDS[kp.id] for kp in keypoints],
+            dtype=np.float32,
+        )
+        dst_points = np.array(
+            [kp.xy for kp in keypoints],
+            dtype=np.float32,
+        )
+
+        H, _ = cv2.findHomography(src_points, dst_points, cv2.RANSAC)
+        if H is None:
+            return keypoints
+
+        estimated = list(keypoints)
+        for missing_id in sorted(missing_ids):
+            px, py = self.COURT_PHYSICAL_COORDS[missing_id]
+            pt = np.array([px, py, 1.0], dtype=np.float64)
+            proj = H @ pt
+            proj /= proj[2]
+            estimated.append(Keypoint(id=missing_id, xy=(float(proj[0]), float(proj[1]))))
+
+        print(
+            f"keypoints_tracker: Estimated {len(missing_ids)} missing keypoint(s) "
+            f"(ids {sorted(missing_ids)}) from court geometry"
+        )
+        return estimated
 
     def video_info_post_init(self, video_info: sv.VideoInfo) -> "KeypointsTracker":
         return self
@@ -247,16 +331,28 @@ class KeypointsTracker(Tracker):
         predictions = []
         for result in results:
             keypoints = []
-            for i, keypoint_detection in enumerate(result.keypoints.xy.squeeze(0)):
+            xy_tensor = result.keypoints.xy
+            # Normalise to [K, 2]: model may return [1, K, 2] (one court, K keypoints)
+            # or [K, 1, 2] (K detections each with 1 keypoint). Squeeze only when
+            # the first dim is exactly 1 to avoid collapsing K detections into nothing.
+            if xy_tensor.dim() == 3 and xy_tensor.shape[0] == 1:
+                xy_tensor = xy_tensor[0]  # [K, 2]
+            for i, keypoint_detection in enumerate(xy_tensor):
+                if i >= len(points_mapper):
+                    break
+                kp = keypoint_detection.reshape(-1)  # flatten [1,2] or [2] → [2]
+                if kp.shape[0] < 2:
+                    continue
                 keypoint = Keypoint(
                     id=points_mapper[i],
                     xy=(
-                        keypoint_detection[0].item() * ratio_x,
-                        keypoint_detection[1].item() * ratio_y,
+                        kp[0].item() * ratio_x,
+                        kp[1].item() * ratio_y,
                     ),
                 )
                 keypoints.append(keypoint)
             
+            keypoints = self._estimate_missing_keypoints(keypoints)
             predictions.append(Keypoints(keypoints))
 
         return predictions
@@ -310,6 +406,3 @@ class KeypointsTracker(Tracker):
                     )
 
         return predictions
-
-    
-    

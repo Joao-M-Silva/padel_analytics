@@ -4,6 +4,7 @@ from typing import Iterable, Optional, Type, Literal
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import json
+import os
 from tqdm import tqdm
 from pathlib import Path
 import numpy as np
@@ -224,20 +225,20 @@ class Tracker(ABC):
         Load previously saved predictions
         """
 
-        if self.load_path:
+        if self.load_path and os.path.exists(self.load_path):
 
             print(f"{self.__str__()}: Loading predictions ...")
 
             with open(self.load_path, "r") as f:
                 parsable_detections = json.load(f)
-            
+
             predictions = [
                 self.object().from_json(obj_json)
                 for obj_json in parsable_detections
             ]
 
             self.results.load(predictions)
-        
+
         print(f"{self.__str__()}: {self.__len__()} predictions loaded.")
 
     def to(self, device: Literal["cuda", "cpu"]) -> None:

@@ -172,42 +172,30 @@ class TrackingRunner:
         print("runner: Done.") 
 
 
-    def run(self) -> None:
+    def run(self, progress_callback=None) -> None:
         """
         Run trackers object prediction for every frame in the frame generator
 
         Parameters:
-            drop_last: True to drop the last sample if its incomplete
+            progress_callback: optional callable(step_name, current_step, total_steps)
+                called before each tracker starts and after draw_and_collect_data completes
         """
 
         print(f"runner: Running {self.total_frames} frames")
 
-        for tracker in self.trackers.values():
+        tracker_names = list(self.trackers.keys())
+        total_steps = len(tracker_names) + 1  # trackers + draw step
+
+        for step_index, (tracker_name, tracker) in enumerate(self.trackers.items()):
+
+            if progress_callback:
+                progress_callback(tracker_name, step_index, total_steps)
 
             if len(tracker) != 0:
                 print(f"{tracker.__str__()}: {len(tracker)} predictions stored")
-                
-
                 continue
 
                 """ FIX TOTAL FRAMES / TOTAL PREDICTIONS MISMATCH """
-
-
-                #if len(tracker) == self.total_frames:
-                #    print(
-                #        f"""{tracker.__str__()}: \
-                #        match between number of predictions and total frames 
-                #        """
-                #    )
-                #    continue
-                #else:
-                #    print(
-                #        f"""{tracker.__str__()}: \
-                #        unmatch between number of predictions and total frames 
-                #        """
-                #   )
-                #    tracker.restart()
-                #    print(f"{tracker.__str__()}: WARNING restarted tracker")
 
             tracker.to(tracker.DEVICE)
             print(f"{str(tracker)}: Running on {tracker.DEVICE} ...")
@@ -222,7 +210,7 @@ class TrackingRunner:
             t0 = timeit.default_timer()
             # Collect all objects predictions for a given video
             tracker.predict_and_update(
-                frame_generator, 
+                frame_generator,
                 total_frames=self.total_frames,
             )
             t1 = timeit.default_timer()
@@ -232,8 +220,14 @@ class TrackingRunner:
             print(f"{str(tracker)}: {t1 - t0} inference time.")
 
             tracker.save_predictions()
-        
+
+        if progress_callback:
+            progress_callback("draw_and_collect", len(tracker_names), total_steps)
+
         self.draw_and_collect_data()
+
+        if progress_callback:
+            progress_callback("done", total_steps, total_steps)
 
         
 

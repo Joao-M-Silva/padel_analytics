@@ -1,0 +1,24 @@
+.git
+.github
+.env
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Large binary / generated files
+weights/
+cache/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.csv
+*.ipynb
+
+# Training artefacts
+runs/
+dataset/
+train/
+models/
+TrackNet/

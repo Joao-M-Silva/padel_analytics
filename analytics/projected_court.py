@@ -455,7 +455,8 @@ class ProjectedCourt:
                 ]
             ) 
         else:
-            raise ValueError("Unhandled number of keypoints detected")
+            print(f"projected_court: Skipping frame — {len(keypoints_detection)} keypoints detected (expected 12/18/22)")
+            return self.H
 
         if src_points.shape != dst_points.shape:
             raise InconsistentPredictedKeypoints("Don't have enough source points")
@@ -657,11 +658,18 @@ class ProjectedCourt:
             print("projected_court: Missing data for players projection")
 
         if self.H is not None and ball_detection:
-            output_frame = self.draw_projected_ball(
-                output_frame,
+            projected_ball = self.project_ball(
                 ball_detection=ball_detection,
                 homography_matrix=self.H,
             )
+            output_frame = projected_ball.draw_projection(output_frame)
+
+            if data_analytics is not None:
+                shifted_ball_pos = self.court_keypoints.shift_point_origin(
+                    point=tuple(float(v) for v in projected_ball.projection),
+                    dimension="meters",
+                )
+                data_analytics.add_ball_position(shifted_ball_pos)
         else:
             print("projected_court: Missing data for ball projection")
 

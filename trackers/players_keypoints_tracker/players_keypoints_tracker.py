@@ -237,6 +237,17 @@ class PlayerKeypointsTracker(Tracker):
 
         self.model = YOLO(model_path)
 
+        # Fix Pose layers saved with old ultralytics that lack self.detect attribute.
+        # In ultralytics 8.2.x Pose.forward calls self.detect(self, x) but old
+        # checkpoints don't have detect in __dict__ — set it after loading.
+        try:
+            from ultralytics.nn.modules.head import Detect
+            for m in self.model.model.modules():
+                if type(m).__name__ == "Pose" and not hasattr(m, "detect"):
+                    m.detect = Detect.forward
+        except Exception:
+            pass
+
         assert train_image_size in (640, 1280)
 
         self.train_image_size = train_image_size
@@ -296,9 +307,7 @@ class PlayerKeypointsTracker(Tracker):
 
             players_keypoints = [] 
 
-            players_keypoints_detection = result.keypoints.xy.squeeze(0)
-            if len(players_keypoints_detection) == 2:
-                players_keypoints_detection = players_keypoints_detection.unsqueeze(0)
+            players_keypoints_detection = result.keypoints.xy
 
             for player_keypoints_detection in players_keypoints_detection:
                 player_keypoints = PlayerKeypoints(
