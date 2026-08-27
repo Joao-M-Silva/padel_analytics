@@ -2,7 +2,7 @@
 
 import json
 import numpy as np
-import os
+import subprocess
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -145,7 +145,18 @@ if upload_video or st.session_state["video"] is not None:
 
     if upload_video:
         st.session_state["df"] = None
-        os.system(f"ffmpeg -y -i {upload_video_path} -vcodec libx264 tmp.mp4")
+        # subprocess.run with an argument list, not os.system with an f-string:
+        # upload_video_path is free text from st.text_input, so shell
+        # interpolation made "x.mp4; <anything>" executable. A list never
+        # invokes a shell. check=True also surfaces ffmpeg failures, which
+        # os.system silently swallowed.
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-i", upload_video_path,
+                "-vcodec", "libx264", "tmp.mp4",
+            ],
+            check=True,
+        )
     
     if st.session_state["df"] is None:
 
