@@ -171,7 +171,11 @@ class Tracker(ABC):
     
     @property
     def DEVICE(self) -> str:
-        return "cuda" if torch.cuda.is_available() else "cpu"
+        if torch.cuda.is_available():
+            return "cuda"
+        if torch.backends.mps.is_available():
+            return "mps"
+        return "cpu"
 
     @abstractmethod
     def restart(self) -> None:

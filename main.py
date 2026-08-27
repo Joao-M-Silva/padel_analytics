@@ -103,6 +103,10 @@ if __name__ == "__main__":
         ]
     )
 
+    assert len(SELECTED_KEYPOINTS) == 12, (
+        f"need exactly 12 court keypoints, got {len(SELECTED_KEYPOINTS)}"
+    )
+
     keypoints_array = np.array(SELECTED_KEYPOINTS)
     # Polygon to filter person detections inside padel court
     polygon_zone = sv.PolygonZone(
@@ -115,7 +119,6 @@ if __name__ == "__main__":
             ),
             axis=0
         ),
-        frame_resolution_wh=video_info.resolution_wh,
     )
 
 
