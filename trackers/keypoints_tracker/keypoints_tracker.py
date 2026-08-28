@@ -162,7 +162,9 @@ class KeypointsTracker(Tracker):
                 self.NUMBER_KEYPOINTS*2,
             )
 
-            state_dict = torch.load(model_path)
+            state_dict = torch.load(
+                model_path, map_location="cpu", weights_only=True,
+            )
             self.model.load_state_dict(state_dict)
             self.model.eval()
         elif model_type == "yolo":
