@@ -1,5 +1,3 @@
-kaleav
-ffmpeg
 matplotlib
 opencv-python
 pims

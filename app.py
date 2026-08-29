@@ -2,7 +2,8 @@
 
 import json
 import numpy as np
-import os
+import subprocess
+from pathlib import Path
 import streamlit as st
 import plotly.graph_objects as go
 import pandas as pd
@@ -145,7 +146,32 @@ if upload_video or st.session_state["video"] is not None:
 
     if upload_video:
         st.session_state["df"] = None
-        os.system(f"ffmpeg -y -i {upload_video_path} -vcodec libx264 tmp.mp4")
+        # subprocess.run with an argument list, not os.system with an f-string:
+        # upload_video_path is free text from st.text_input, so shell
+        # interpolation made "x.mp4; <anything>" executable. A list never
+        # invokes a shell. check=True also surfaces ffmpeg failures, which
+        # os.system silently swallowed.
+        # ffmpeg's -i is itself a network sink: `ffmpeg -protocols` lists http,
+        # https, ftp, rtmp, tcp and concat, and a URL there really is fetched.
+        # On a deployed dashboard that reaches the cloud metadata endpoint. A
+        # URL is not a file, so requiring an existing local file rejects every
+        # remote scheme.
+        if not Path(upload_video_path).is_file():
+            st.error(f"Not a video file on this machine: {upload_video_path}")
+            st.stop()
+
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                # input option, so it must precede -i to constrain the input at
+                # all. Defence in depth against a local file that references
+                # remote segments; not a demonstrated bypass, just cheap.
+                "-protocol_whitelist", "file",
+                "-i", upload_video_path,
+                "-vcodec", "libx264", "tmp.mp4",
+            ],
+            check=True,
+        )
     
     if st.session_state["df"] is None:
 
