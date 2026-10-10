@@ -1,4 +1,6 @@
 __pycache__
+.DS_Store
+.venv/
 *.mp4
 *.avi
 *.png
