@@ -21,13 +21,32 @@ The goal of this project is to provide precise and robust analytics using only a
 
 # Setup
 #### 1. Clone this repository.
-#### 2. Setup virtual environment.
+#### 2. Set up a virtual environment.
+Install Python 3.12, then run these commands from the repository root on macOS or Linux:
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 ```
-conda create -n python=3.12 padel_analytics pip
-conda activate padel_analytics
-pip install -r requirements.txt
+On Windows (PowerShell), use `py -3.12 -m venv .venv` and `.venv\Scripts\Activate.ps1` instead of the first two commands.
+
+#### 3. Install dependencies.
+With the environment activated, install `torch` and `torchvision` using the command from the [PyTorch installation selector](https://pytorch.org/get-started/locally/) for your operating system and compute platform. Then install the remaining dependencies:
+```bash
+python -m pip install -r requirements.txt
 ```
-#### 3. Install pytorch <https://pytorch.org/get-started/locally/>.
+The Streamlit app (`app.py`) also needs the [FFmpeg executable](https://ffmpeg.org/download.html) available on your `PATH`. Install it using your system package manager:
+
+On Linux: `sudo apt update && sudo apt install ffmpeg`
+On macOS: `brew install ffmpeg`
+
+Confirm the installationwith:
+```bash
+ffmpeg -version
+```
+
+Plotly PNG export also needs Chrome or Chromium installed; see the [Plotly image export instructions](https://plotly.com/python/static-image-export/).
+
 #### 4. Download weights.
    The current model weights used are available here https://drive.google.com/drive/folders/1joO7w1Am7B418SIqGBq90YipQl81FMzh?usp=drive_link. Configure the config.py file with your own model checkpoints paths. 
 # Inference
